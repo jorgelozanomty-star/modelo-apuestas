@@ -56,42 +56,61 @@ def get_kelly(p_mia, momio):
     f = (b * p - (1 - p)) / b if b > 0 else 0
     return max(0, f * fractional_kelly)
 
+# Almacenar sugerencias para la simulación
+stake_l = banca_total * get_kelly(prob_l, m_l)
+stake_v = banca_total * get_kelly(prob_v, m_v)
+stake_e = banca_total * get_kelly(prob_e, m_e)
+
 if st.button("📊 GENERAR PLAN DE APUESTA"):
     st.markdown("---")
     res_cols = st.columns(3)
-    equipos = [(local, prob_l, m_l), (visita, prob_v, m_v), ("Empate", prob_e, m_e)]
+    equipos = [(local, prob_l, m_l, stake_l), (visita, prob_v, m_v, stake_v), ("Empate", prob_e, m_e, stake_e)]
     
-    for i, (nom, p, m) in enumerate(equipos):
+    for i, (nom, p, m, s) in enumerate(equipos):
         with res_cols[i]:
             ev = (p/100 * (m-1) * 100) - ((1-p/100) * 100)
             if ev > 0:
                 st.success(f"✅ {nom}")
                 st.metric("EV", f"+${ev:.2f}")
-                st.metric("Stake Sugerido", f"${banca_total * get_kelly(p, m):.2f}")
+                st.metric("Stake Sugerido", f"${s:.2f}")
             else:
                 st.error(f"❌ {nom}")
                 st.caption(f"EV: ${ev:.2f}")
 
-    # --- SECCIÓN DE SENSIBILIDAD ---
+    # --- GRÁFICAS ---
     st.markdown("---")
     st.subheader(f"📈 Curva de Rentabilidad ({local})")
-    
     data_plot = []
     for var in range(-10, 11):
         p_var = prob_l + var
         if 0 <= p_var <= 100:
-            stake_var = banca_total * get_kelly(p_var, m_l)
+            s_var = banca_total * get_kelly(p_var, m_l)
             ev_var = (p_var/100 * (m_l-1) * 100) - ((1-p_var/100) * 100)
-            data_plot.append({"Prob (%)": p_var, "EV ($)": round(ev_var, 2), "Stake ($)": round(stake_var, 2)})
-    
+            data_plot.append({"Prob (%)": p_var, "EV ($)": round(ev_var, 2), "Stake ($)": round(s_var, 2)})
     df_plot = pd.DataFrame(data_plot).set_index("Prob (%)")
-    
-    col_chart1, col_chart2 = st.columns(2)
-    with col_chart1:
-        st.write("**Evolución del EV ($)**")
-        st.line_chart(df_plot["EV ($)"])
-    with col_chart2:
-        st.write("**Evolución del Stake ($)**")
-        st.line_chart(df_plot["Stake ($)"])
+    c_chart1, c_chart2 = st.columns(2)
+    with c_chart1: st.line_chart(df_plot["EV ($)"])
+    with c_chart2: st.line_chart(df_plot["Stake ($)"])
 
-    st.table(df_plot.reset_index())
+# --- 3. SIMULADOR DE RESULTADO FINAL ---
+st.markdown("---")
+st.header("3️⃣ Simulador de Resultado (Post-Partido)")
+resultado_real = st.radio("¿Quién ganó el partido?", [local, visita, "Empate"], horizontal=True)
+
+if st.button("💰 Calcular Utilidad"):
+    ganancia = 0
+    # Calcular según lo que el modelo sugirió apostar
+    if resultado_real == local:
+        ganancia = (stake_l * m_l) - stake_l - stake_v - stake_e
+    elif resultado_real == visita:
+        ganancia = (stake_v * m_v) - stake_v - stake_l - stake_e
+    else:
+        ganancia = (stake_e * m_e) - stake_e - stake_l - stake_v
+    
+    if ganancia >= 0:
+        st.balloons()
+        st.success(f"🎊 ¡Ganancia Neta: +${ganancia:.2f}!")
+    else:
+        st.error(f"📉 Pérdida Neta: ${ganancia:.2f}")
+    
+    st.info(f"ROI de la operación: {(ganancia / (stake_l + stake_v + stake_e + 0.000001)) * 100:.2f}%")
