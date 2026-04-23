@@ -291,45 +291,47 @@ for key, val in [
         st.session_state[key] = val
 
 # ─── HELPERS ──────────────────────────────────────────────────────────────────
-def safe_float(v, default=0.0):
+def process_fbref_paste(text):
+    """Parsea tabla copiada de FBRef. Maneja cabeceras duplicadas y valores vacíos."""
+    if not text or len(text) < 10: return None
     try:
-        f = float(v)
-        return default if (f != f) else f  # NaN check
-    except: return default
+        clean = text.replace("Club Crest", "").strip()
+        # Leer todo como string para poder limpiar antes de convertir
+        df = pd.read_csv(io.StringIO(clean), sep='\t', dtype=str)
+        if len(df.columns) < 2:
+            df = pd.read_csv(io.StringIO(clean), sep=None, engine='python', dtype=str)
+        df.columns = [str(c).strip() for c in df.columns]
+        if 'Squad' not in df.columns:
+            return None
+        df['Squad'] = df['Squad'].str.replace("Club Crest", "", regex=False).str.strip()
+        df['Squad'] = df['Squad'].replace(EQUIPOS_MAP)
+        # Eliminar filas de cabecera repetidas y totales
+        bad = {'squad', 'total', 'average', 'avg', '', 'nan', 'none', 'squads'}
+        df = df[~df['Squad'].str.lower().fillna('').isin(bad)]
+        # Eliminar filas donde columna numérica clave tiene el nombre de la columna
+        for chk in ['MP', '90s', 'Gls', 'GF', 'Pts']:
+            if chk in df.columns:
+                df = df[df[chk].str.lower().fillna('').ne(chk.lower())]
+                break
+        # Convertir columnas numéricas
+        skip = {'Squad', 'Last 5', 'Goalkeeper', 'Top Team Scorer', 'Notes',
+                'Country', 'Comp', 'LgRk', 'Attendance'}
+        for c in df.columns:
+            if c not in skip:
+                df[c] = pd.to_numeric(df[c], errors='ignore')
+        return df.reset_index(drop=True) if len(df) > 0 else None
+    except:
+        return None
 
-# Valores que FBRef pone cuando no hay datos
-_EMPTY_VALS = {'', 'nan', 'n/a', 'na', '-', '—', 'none', 'null', '#value!', '#n/a'}
-
-def col(row, *candidates, default=0.0):
-    """Busca el primer candidato de columna con valor real en la fila de FBRef.
-    Maneja duplicados de pandas (xG -> xG.1 -> xG.2), NaN, celdas vacías, etc.
-    """
-    # Expandir candidatos con variantes de pandas duplicados
-    expanded = []
-    for c in candidates:
-        expanded.append(c)
-        for suffix in ['.1', '.2', '_1', '_2']:
-            expanded.append(c + suffix)
-    for c in expanded:
-        raw = row.get(c, None)
-        if raw is None: continue
-        s = str(raw).strip().lower()
-        if s in _EMPTY_VALS: continue
-        v = safe_float(raw, None)
-        if v is not None and v >= 0:
-            return v
-    return default
-
-def needs_division(val, mp, typical_per_game=3.0):
-    """Detecta si val es un acumulado de temporada o ya viene por partido.
-    Heurística: si val > mp * typical_per_game, es acumulado.
-    """
-    return val > mp * typical_per_game
-
-def to_per_game(val, mp, typical_per_game=3.0):
-    """Convierte a por partido si parece ser acumulado."""
-    if mp < 1: mp = 1
-    return val / mp if needs_division(val, mp, typical_per_game) else val
+def get_team_row(table_name, squad_name):
+    dm = st.session_state.data_master
+    if table_name not in dm or 'Squad' not in dm[table_name].columns:
+        return None
+    df = dm[table_name]
+    exact = df[df['Squad'] == squad_name]
+    if not exact.empty: return exact.iloc[0]
+    partial = df[df['Squad'].str.contains(squad_name, na=False, case=False)]
+    return partial.iloc[0] if not partial.empty else None
 
 def fmt_money(v): return f"${v:,.2f}"
 
@@ -345,208 +347,229 @@ def get_kelly(prob, momio, fraction):
     edge = ((momio - 1) * prob) - (1 - prob)
     return max(0.0, (edge / (momio - 1)) * fraction)
 
-def process_fbref_paste(text):
-    if not text or len(text) < 10: return None
+def safe_float(v, default=0.0):
     try:
-        clean = text.replace("Club Crest", "").strip()
-        df = pd.read_csv(io.StringIO(clean), sep='\t')
-        if len(df.columns) < 2:
-            df = pd.read_csv(io.StringIO(clean), sep=None, engine='python')
-        df.columns = [c.strip() for c in df.columns]
-        if 'Squad' in df.columns:
-            df['Squad'] = df['Squad'].str.replace("Club Crest", "", regex=False).str.strip()
-            df['Squad'] = df['Squad'].replace(EQUIPOS_MAP)
-        # Remove total/average rows
-        if 'Squad' in df.columns:
-            df = df[~df['Squad'].str.lower().isin(['squad', 'total', 'average', 'avg', ''])]
-        return df if len(df) > 0 else None
-    except: return None
+        f = float(v)
+        return default if (f != f) else f  # NaN check
+    except:
+        return default
 
-def get_team_row(table_name, squad_name):
-    dm = st.session_state.data_master
-    if table_name not in dm or 'Squad' not in dm[table_name].columns:
-        return None
-    df = dm[table_name]
-    exact = df[df['Squad'] == squad_name]
-    if not exact.empty: return exact.iloc[0]
-    partial = df[df['Squad'].str.contains(squad_name, na=False, case=False)]
-    return partial.iloc[0] if not partial.empty else None
+_MISSING = {'', 'nan', 'n/a', 'na', '-', '—', 'none', 'null', '#value!', '#n/a', '#ref!'}
 
-def per_game(raw_val, mp, threshold=4.0):
-    """Divide by MP only if raw_val looks like a season total (> threshold)."""
-    v = safe_float(raw_val)
-    m = max(safe_float(mp, 1), 1)
-    return v / m if v > threshold else v
+def fget(row, *keys, default=0.0):
+    """Lee la primera columna disponible con valor numérico real.
+    Prueba cada key y también su variante pandas-duplicado (key.1, key.2).
+    """
+    for k in keys:
+        for candidate in [k, f"{k}.1", f"{k}.2"]:
+            raw = row.get(candidate, None)
+            if raw is None:
+                continue
+            if str(raw).strip().lower() in _MISSING:
+                continue
+            v = safe_float(raw, None)
+            if v is not None:
+                return v
+    return default
+
+def read_mp(row, fallback=1):
+    """Lee partidos jugados. Busca MP, 90s, PJ, Matches — lo que exista."""
+    v = fget(row, 'MP', '90s', 'PJ', 'Matches', default=0)
+    return max(int(v) if v >= 3 else fallback, 1)
+
+# Convertidor a por-partido con umbral FIJO por tipo de estadística.
+# Si el valor bruto supera el umbral, asumimos que es acumulado de temporada.
+# Si no, asumimos que ya viene por partido (algunos exportes de FBRef lo hacen).
+_THRESHOLDS = {
+    # (umbral_acumulado, max_razonable_por_partido)
+    'goals':   (5.0,  4.5),
+    'xg':      (4.0,  4.0),
+    'shots':   (30.0, 22.0),
+    'sot':     (12.0, 9.0),
+    'fouls':   (15.0, 18.0),
+    'cards':   (4.0,  4.0),
+    'pct':     (1.0,  100.0),  # porcentajes ya vienen en 0-100
+}
+
+def pg(val, mp, kind='goals'):
+    """Convierte val a por-partido si parece ser total de temporada."""
+    if val <= 0 or mp < 1:
+        return 0.0
+    threshold, max_val = _THRESHOLDS.get(kind, (5.0, 99.0))
+    result = (val / mp) if val > threshold else val
+    return min(result, max_val)
 
 def build_team_profile(squad_name):
-    """Perfil completo del equipo desde las 9 tablas FBRef.
+    """Perfil completo desde las 9 tablas FBRef.
 
-    Estrategia de normalización:
-    - Usamos col() para manejar nombres duplicados de pandas (xG vs xG.1) y celdas vacías.
-    - to_per_game() detecta si el valor es acumulado de temporada o ya por partido.
-    - Si una tabla no tiene datos para el equipo, mantenemos el default sin romper el modelo.
-    - Lambda final = blend ponderado de las fuentes disponibles (goles > xG > npxG).
+    Estrategia:
+    - fget() busca columnas con múltiples nombres candidatos.
+    - read_mp() obtiene partidos jugados de cualquier columna que los tenga.
+    - pg() convierte acumulados → por partido con umbrales fijos por tipo de stat.
+    - Los lambdas del modelo se recalculan como blend ponderado de las fuentes disponibles.
     """
     p = {
         'name': squad_name,
-        'gf_pg': 1.5,  'xg_pg': 0.0, 'npxg_pg': 0.0,
-        'xg_sh_pg': 0.0,  # xG from Shooting (más confiable que Standard)
+        # Ataque
+        'gf_pg': 1.5, 'xg_pg': 0.0, 'npxg_pg': 0.0,
         'sh_pg': 0.0, 'sot_pg': 0.0, 'g_sh': 0.0, 'sot_pct': 0.0,
+        # Defensa
         'ga_pg': 1.1, 'xga_pg': 0.0,
         'opp_sh_pg': 0.0, 'opp_sot_pg': 0.0, 'opp_sot_pct': 0.0,
+        # Disciplina
         'fouls_pg': 0.0, 'yellows_pg': 0.0, 'reds_pg': 0.0,
         'opp_fouls_pg': 0.0,
+        # Aéreos
         'aerials_won_pct': 0.0,
+        # Tabla
         'position': None, 'points': None, 'wdl': '',
+        # Modelo
         'lambda_att': 1.5, 'lambda_def': 1.1,
         'mp': 1,
-        'data_sources': [],   # para mostrar qué tablas aportaron datos
+        'sources': [],
     }
 
     # ── 1. Tabla General ─────────────────────────────────────────────────────
     row = get_team_row("Tabla General", squad_name)
     if row is not None:
-        mp_g = max(col(row, 'MP', 'PJ', 'Pts', default=1), 1)
-        # Si la tabla general solo tiene Pts y no MP, intentar reconstruir
-        mp_g = max(col(row, 'MP', 'PJ', default=mp_g), 1)
-        p['mp'] = int(mp_g)
-        rk = col(row, 'Rk', 'Pos', '#', default=0)
-        if rk: p['position'] = int(rk)
-        pts = col(row, 'Pts', default=0)
-        if pts: p['points'] = int(pts)
-        w = int(col(row, 'W', 'G', 'GW', default=0))
-        d = int(col(row, 'D', 'E', 'GD', default=0))
-        l = int(col(row, 'L', 'P', 'GL', default=0))
+        mp_g = read_mp(row, fallback=1)
+        if mp_g >= 3:
+            p['mp'] = mp_g
+        rk = fget(row, 'Rk', 'Pos', '#', default=0)
+        if rk > 0:
+            p['position'] = int(rk)
+        pts = fget(row, 'Pts', default=0)
+        if pts > 0:
+            p['points'] = int(pts)
+        w = int(fget(row, 'W', 'G', 'GW', default=0))
+        d = int(fget(row, 'D', 'E', default=0))
+        l = int(fget(row, 'L', 'P', default=0))
         if w + d + l > 0:
             p['wdl'] = f"{w}G-{d}E-{l}P"
-        p['data_sources'].append('Tabla General')
+        p['sources'].append('TG')
 
     # ── 2. Standard Squad ────────────────────────────────────────────────────
     row = get_team_row("Standard Squad", squad_name)
     if row is not None:
-        mp_s = max(col(row, 'MP', default=p['mp']), 1)
-        p['mp'] = int(mp_s)
-        # Goles: puede venir como GF (liga table) o Gls (squad stats)
-        gf_raw = col(row, 'GF', 'Gls', default=0)
+        mp_s = read_mp(row, fallback=p['mp'])
+        if mp_s >= 3:
+            p['mp'] = mp_s
+        # Goles: FBRef Standard Squad usa 'Gls' (no 'GF' — eso es en la tabla de liga)
+        gf_raw = fget(row, 'GF', 'Gls', default=0)
         if gf_raw > 0:
-            p['gf_pg'] = to_per_game(gf_raw, mp_s, typical_per_game=1.5)
-        # xG: FBRef a veces duplica la columna como xG y xG.1 (per90 version)
-        # Intentamos ambas; preferimos la que sea consistente con MP
-        xg_raw = col(row, 'xG', 'xG.1', 'Expected xG', default=0)
+            p['gf_pg'] = pg(gf_raw, p['mp'], 'goals')
+        # xG: puede aparecer duplicado; la primera instancia es el total de temporada
+        xg_raw = fget(row, 'xG', default=0)
         if xg_raw > 0:
-            p['xg_pg'] = to_per_game(xg_raw, mp_s, typical_per_game=1.2)
-        p['data_sources'].append('Standard Squad')
+            p['xg_pg'] = pg(xg_raw, p['mp'], 'xg')
+        p['sources'].append('SS')
 
     # ── 3. Standard Opp ──────────────────────────────────────────────────────
     row = get_team_row("Standard Opp", squad_name)
     if row is not None:
-        mp_o = max(col(row, 'MP', default=p['mp']), 1)
-        ga_raw = col(row, 'GA', 'Gls', default=0)
+        mp_o = read_mp(row, fallback=p['mp'])
+        if mp_o >= 3:
+            p['mp'] = max(p['mp'], mp_o)
+        # En Standard Opp 'Gls' = goles del rival = goles recibidos por este equipo
+        ga_raw = fget(row, 'GA', 'Gls', default=0)
         if ga_raw > 0:
-            p['ga_pg'] = to_per_game(ga_raw, mp_o, typical_per_game=1.2)
-        # xGA: puede llamarse xGA o xG en tablas de oponentes
-        xga_raw = col(row, 'xGA', 'xG', 'xG.1', 'Expected xGA', default=0)
+            p['ga_pg'] = pg(ga_raw, p['mp'], 'goals')
+        # xGA puede llamarse 'xGA' o simplemente 'xG' en la tabla opp
+        xga_raw = fget(row, 'xGA', 'xG', default=0)
         if xga_raw > 0:
-            p['xga_pg'] = to_per_game(xga_raw, mp_o, typical_per_game=1.2)
-        p['data_sources'].append('Standard Opp')
+            p['xga_pg'] = pg(xga_raw, p['mp'], 'xg')
+        p['sources'].append('SO')
 
     # ── 4. Shooting Squad ────────────────────────────────────────────────────
     row = get_team_row("Shooting Squad", squad_name)
     if row is not None:
-        # FBRef Shooting usa '90s' (partidos jugados como 90 mins)
-        mp90 = max(col(row, '90s', 'MP', default=p['mp']), 1)
-        sh_raw   = col(row, 'Sh', default=0)
-        sot_raw  = col(row, 'SoT', default=0)
-        # npxG: columna propia o puede aparecer como npxG.1
-        npxg_raw = col(row, 'npxG', 'npxG.1', 'np:xG', default=0)
-        # xG de Shooting — preferimos esta sobre Standard porque es más precisa
-        xg_sh_raw = col(row, 'xG', 'xG.1', default=0)
-        g_sh_raw = col(row, 'G/Sh', 'G-Sh', default=0)
-        sot_pct_raw = col(row, 'SoT%', default=0)
+        mp90 = read_mp(row, fallback=p['mp'])
+        if mp90 >= 3:
+            p['mp'] = max(p['mp'], mp90)
+        sh_raw   = fget(row, 'Sh', default=0)
+        sot_raw  = fget(row, 'SoT', default=0)
+        npxg_raw = fget(row, 'npxG', 'np:xG', default=0)
+        xg_sh    = fget(row, 'xG', default=0)
+        g_sh_raw = fget(row, 'G/Sh', 'G-Sh', default=0)
+        sot_pct  = fget(row, 'SoT%', default=0)
 
-        if sh_raw  > 0: p['sh_pg']   = to_per_game(sh_raw,  mp90, typical_per_game=10.0)
-        if sot_raw > 0: p['sot_pg']  = to_per_game(sot_raw, mp90, typical_per_game=4.0)
-        if npxg_raw> 0: p['npxg_pg'] = to_per_game(npxg_raw, mp90, typical_per_game=1.2)
-        if xg_sh_raw>0:
-            p['xg_sh_pg'] = to_per_game(xg_sh_raw, mp90, typical_per_game=1.2)
-            # Si Standard Squad no tenía xG, usamos este
-            if p['xg_pg'] == 0:
-                p['xg_pg'] = p['xg_sh_pg']
-        p['g_sh'] = g_sh_raw
+        if sh_raw   > 0: p['sh_pg']   = pg(sh_raw,   p['mp'], 'shots')
+        if sot_raw  > 0: p['sot_pg']  = pg(sot_raw,  p['mp'], 'sot')
+        if npxg_raw > 0: p['npxg_pg'] = pg(npxg_raw, p['mp'], 'xg')
+        # Si Standard Squad no tenía xG, tomarlo de Shooting Squad
+        if xg_sh > 0 and p['xg_pg'] == 0:
+            p['xg_pg'] = pg(xg_sh, p['mp'], 'xg')
+        if g_sh_raw > 0:
+            p['g_sh'] = g_sh_raw  # ya es ratio, no acumulado
         if sot_raw > 0 and sh_raw > 0:
-            p['sot_pct'] = (sot_raw / sh_raw * 100)
-        elif sot_pct_raw > 0:
-            p['sot_pct'] = sot_pct_raw
-        p['data_sources'].append('Shooting Squad')
+            p['sot_pct'] = (sot_raw / sh_raw * 100) if sot_raw < sh_raw else safe_float(sot_pct)
+        elif sot_pct > 0:
+            p['sot_pct'] = sot_pct
+        p['sources'].append('ShS')
 
     # ── 5. Shooting Opp ──────────────────────────────────────────────────────
     row = get_team_row("Shooting Opp", squad_name)
     if row is not None:
-        mp90o = max(col(row, '90s', 'MP', default=p['mp']), 1)
-        opp_sh_raw  = col(row, 'Sh', default=0)
-        opp_sot_raw = col(row, 'SoT', default=0)
-        # xGA desde Shooting Opp — más granular que Standard Opp
-        xga_sh_raw = col(row, 'xG', 'xG.1', default=0)
-        if opp_sh_raw  > 0: p['opp_sh_pg']  = to_per_game(opp_sh_raw,  mp90o, 10.0)
-        if opp_sot_raw > 0: p['opp_sot_pg'] = to_per_game(opp_sot_raw, mp90o, 4.0)
-        if xga_sh_raw  > 0 and p['xga_pg'] == 0:
-            p['xga_pg'] = to_per_game(xga_sh_raw, mp90o, 1.2)
-        if opp_sh_raw > 0 and opp_sot_raw > 0:
-            p['opp_sot_pct'] = (opp_sot_raw / opp_sh_raw * 100)
-        p['data_sources'].append('Shooting Opp')
+        mp90o = read_mp(row, fallback=p['mp'])
+        opp_sh  = fget(row, 'Sh', default=0)
+        opp_sot = fget(row, 'SoT', default=0)
+        xga_sh  = fget(row, 'xG', default=0)
+        if opp_sh  > 0: p['opp_sh_pg']  = pg(opp_sh,  mp90o, 'shots')
+        if opp_sot > 0: p['opp_sot_pg'] = pg(opp_sot, mp90o, 'sot')
+        if opp_sot > 0 and opp_sh > 0:
+            p['opp_sot_pct'] = (opp_sot / opp_sh * 100) if opp_sot < opp_sh else 0
+        if xga_sh > 0 and p['xga_pg'] == 0:
+            p['xga_pg'] = pg(xga_sh, mp90o, 'xg')
+        p['sources'].append('ShO')
 
     # ── 6. Misc Squad ────────────────────────────────────────────────────────
     row = get_team_row("Misc Squad", squad_name)
     if row is not None:
-        mp90m = max(col(row, '90s', 'MP', default=p['mp']), 1)
-        fls_raw  = col(row, 'Fls', default=0)
-        crdy_raw = col(row, 'CrdY', default=0)
-        crdr_raw = col(row, 'CrdR', default=0)
-        aer_raw  = col(row, 'Won%', 'Aerial Won%', 'Aerials Won%', default=0)
-        if fls_raw  > 0: p['fouls_pg']   = to_per_game(fls_raw,  mp90m, 8.0)
-        if crdy_raw > 0: p['yellows_pg'] = to_per_game(crdy_raw, mp90m, 2.0)
-        if crdr_raw > 0: p['reds_pg']    = to_per_game(crdr_raw, mp90m, 0.5)
-        if aer_raw  > 0: p['aerials_won_pct'] = aer_raw
-        p['data_sources'].append('Misc Squad')
+        mp90m = read_mp(row, fallback=p['mp'])
+        fls  = fget(row, 'Fls', default=0)
+        crdy = fget(row, 'CrdY', default=0)
+        crdr = fget(row, 'CrdR', default=0)
+        aer  = fget(row, 'Won%', 'Aerial Won%', default=0)
+        if fls  > 0: p['fouls_pg']   = pg(fls,  mp90m, 'fouls')
+        if crdy > 0: p['yellows_pg'] = pg(crdy, mp90m, 'cards')
+        if crdr > 0: p['reds_pg']    = pg(crdr, mp90m, 'cards')
+        if aer  > 0: p['aerials_won_pct'] = aer
+        p['sources'].append('MiS')
 
     # ── 7. Misc Opp ──────────────────────────────────────────────────────────
     row = get_team_row("Misc Opp", squad_name)
     if row is not None:
-        mp90mo = max(col(row, '90s', 'MP', default=p['mp']), 1)
-        opp_fls_raw = col(row, 'Fls', default=0)
-        if opp_fls_raw > 0:
-            p['opp_fouls_pg'] = to_per_game(opp_fls_raw, mp90mo, 8.0)
-        p['data_sources'].append('Misc Opp')
+        mp90mo = read_mp(row, fallback=p['mp'])
+        opp_fls = fget(row, 'Fls', default=0)
+        if opp_fls > 0:
+            p['opp_fouls_pg'] = pg(opp_fls, mp90mo, 'fouls')
+        p['sources'].append('MiO')
 
     # ── Lambda blend ─────────────────────────────────────────────────────────
-    # Jerarquía de fuentes de ataque:
-    #   npxG (más puro, sin penales) > xG > goles reales
-    # Cuando hay varias fuentes, el blend pondera más las basadas en xG
-    # porque son menos ruidosas que goles (n pequeño en Liga MX ~17 jornadas).
+    # Regla: xG es más estable que goles reales en muestras pequeñas (Liga MX ~17 jornadas).
+    # Si hay npxG (sin penales), es el predictor más limpio.
     #
-    # Pesos base: goles=0.40, xG=0.40, npxG=0.20
-    # Si solo hay goles: lambda = goles (sin modificar)
-    # Si hay xG pero no npxG: lambda = 0.5*goles + 0.5*xG
-    # Si hay los tres: lambda = 0.35*goles + 0.40*xG + 0.25*npxG
-
-    gf  = p['gf_pg']   if p['gf_pg']   > 0.01 else None
-    xg  = p['xg_pg']   if p['xg_pg']   > 0.01 else None
-    npx = p['npxg_pg'] if p['npxg_pg'] > 0.01 else None
+    # Fuentes disponibles → Pesos del blend:
+    #   Solo goles:          λ = goles
+    #   Goles + xG:          λ = 0.50·goles + 0.50·xG
+    #   Goles + xG + npxG:   λ = 0.35·goles + 0.40·xG + 0.25·npxG
+    gf  = p['gf_pg']   if p['gf_pg']   > 0.05 else None
+    xg  = p['xg_pg']   if p['xg_pg']   > 0.05 else None
+    npx = p['npxg_pg'] if p['npxg_pg'] > 0.05 else None
 
     if   gf and xg and npx: p['lambda_att'] = 0.35*gf + 0.40*xg + 0.25*npx
     elif gf and xg:          p['lambda_att'] = 0.50*gf + 0.50*xg
     elif gf:                 p['lambda_att'] = gf
     else:                    p['lambda_att'] = 1.5
 
-    ga  = p['ga_pg']   if p['ga_pg']   > 0.01 else None
-    xga = p['xga_pg']  if p['xga_pg']  > 0.01 else None
+    ga  = p['ga_pg']  if p['ga_pg']  > 0.05 else None
+    xga = p['xga_pg'] if p['xga_pg'] > 0.05 else None
 
     if   ga and xga: p['lambda_def'] = 0.50*ga + 0.50*xga
     elif ga:         p['lambda_def'] = ga
     else:            p['lambda_def'] = 1.1
 
     return p
-
 def calc_poisson(lam_l, lam_v):
     p_l = p_v = p_e = 0.0
     matrix = {}
