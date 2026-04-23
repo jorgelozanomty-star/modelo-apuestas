@@ -165,16 +165,18 @@ section[data-testid="stSidebar"] .stTextArea textarea {
 
 /* ── BANCA ── */
 .banca-box {
-    background: #1c1917;
+    background: #ffffff;
+    border: 1px solid #e7e5e0;
+    border-left: 3px solid #1c1917;
     border-radius: 10px;
-    padding: 16px 18px;
+    padding: 14px 18px;
     margin-bottom: 16px;
 }
-.banca-lbl { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.12em; color: #78716c; font-family: 'DM Mono', monospace; }
-.banca-val { font-size: 1.7rem; font-weight: 700; font-family: 'DM Mono', monospace; color: #fafaf9; margin: 4px 0 2px 0; }
+.banca-lbl { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.12em; color: #a8a29e; font-family: 'DM Mono', monospace; }
+.banca-val { font-size: 1.7rem; font-weight: 700; font-family: 'DM Mono', monospace; color: #1c1917; margin: 4px 0 2px 0; }
 .banca-roi { font-size: 0.72rem; font-family: 'DM Mono', monospace; }
-.roi-pos { color: #4ade80; }
-.roi-neg { color: #f87171; }
+.roi-pos { color: #16a34a; }
+.roi-neg { color: #dc2626; }
 .roi-neu { color: #a8a29e; }
 
 /* ── SIDEBAR STATUS ── */
