@@ -292,8 +292,44 @@ for key, val in [
 
 # ─── HELPERS ──────────────────────────────────────────────────────────────────
 def safe_float(v, default=0.0):
-    try: return float(v)
+    try:
+        f = float(v)
+        return default if (f != f) else f  # NaN check
     except: return default
+
+# Valores que FBRef pone cuando no hay datos
+_EMPTY_VALS = {'', 'nan', 'n/a', 'na', '-', '—', 'none', 'null', '#value!', '#n/a'}
+
+def col(row, *candidates, default=0.0):
+    """Busca el primer candidato de columna con valor real en la fila de FBRef.
+    Maneja duplicados de pandas (xG -> xG.1 -> xG.2), NaN, celdas vacías, etc.
+    """
+    # Expandir candidatos con variantes de pandas duplicados
+    expanded = []
+    for c in candidates:
+        expanded.append(c)
+        for suffix in ['.1', '.2', '_1', '_2']:
+            expanded.append(c + suffix)
+    for c in expanded:
+        raw = row.get(c, None)
+        if raw is None: continue
+        s = str(raw).strip().lower()
+        if s in _EMPTY_VALS: continue
+        v = safe_float(raw, None)
+        if v is not None and v >= 0:
+            return v
+    return default
+
+def needs_division(val, mp, typical_per_game=3.0):
+    """Detecta si val es un acumulado de temporada o ya viene por partido.
+    Heurística: si val > mp * typical_per_game, es acumulado.
+    """
+    return val > mp * typical_per_game
+
+def to_per_game(val, mp, typical_per_game=3.0):
+    """Convierte a por partido si parece ser acumulado."""
+    if mp < 1: mp = 1
+    return val / mp if needs_division(val, mp, typical_per_game) else val
 
 def fmt_money(v): return f"${v:,.2f}"
 
@@ -343,114 +379,171 @@ def per_game(raw_val, mp, threshold=4.0):
     return v / m if v > threshold else v
 
 def build_team_profile(squad_name):
-    """Construye perfil completo del equipo usando las 9 tablas."""
+    """Perfil completo del equipo desde las 9 tablas FBRef.
+
+    Estrategia de normalización:
+    - Usamos col() para manejar nombres duplicados de pandas (xG vs xG.1) y celdas vacías.
+    - to_per_game() detecta si el valor es acumulado de temporada o ya por partido.
+    - Si una tabla no tiene datos para el equipo, mantenemos el default sin romper el modelo.
+    - Lambda final = blend ponderado de las fuentes disponibles (goles > xG > npxG).
+    """
     p = {
         'name': squad_name,
-        # Ataque
         'gf_pg': 1.5,  'xg_pg': 0.0, 'npxg_pg': 0.0,
-        'sh_pg': 0.0,   'sot_pg': 0.0, 'g_sh': 0.0, 'sot_pct': 0.0,
-        # Defensa
-        'ga_pg': 1.1,  'xga_pg': 0.0,
+        'xg_sh_pg': 0.0,  # xG from Shooting (más confiable que Standard)
+        'sh_pg': 0.0, 'sot_pg': 0.0, 'g_sh': 0.0, 'sot_pct': 0.0,
+        'ga_pg': 1.1, 'xga_pg': 0.0,
         'opp_sh_pg': 0.0, 'opp_sot_pg': 0.0, 'opp_sot_pct': 0.0,
-        # Disciplina
         'fouls_pg': 0.0, 'yellows_pg': 0.0, 'reds_pg': 0.0,
         'opp_fouls_pg': 0.0,
-        # Aéreos
         'aerials_won_pct': 0.0,
-        # Tabla
         'position': None, 'points': None, 'wdl': '',
-        # Derivados
         'lambda_att': 1.5, 'lambda_def': 1.1,
         'mp': 1,
+        'data_sources': [],   # para mostrar qué tablas aportaron datos
     }
 
-    # ── 1. Tabla General ───────────────────────────────────────────────────────
+    # ── 1. Tabla General ─────────────────────────────────────────────────────
     row = get_team_row("Tabla General", squad_name)
     if row is not None:
-        mp_g = max(safe_float(row.get('MP', row.get('PJ', 1))), 1)
+        mp_g = max(col(row, 'MP', 'PJ', 'Pts', default=1), 1)
+        # Si la tabla general solo tiene Pts y no MP, intentar reconstruir
+        mp_g = max(col(row, 'MP', 'PJ', default=mp_g), 1)
         p['mp'] = int(mp_g)
-        rk = row.get('Rk', row.get('Pos', None))
-        if rk is not None: p['position'] = int(safe_float(rk))
-        pts = row.get('Pts', None)
-        if pts is not None: p['points'] = int(safe_float(pts))
-        w = int(safe_float(row.get('W', row.get('G', 0))))
-        d = int(safe_float(row.get('D', row.get('E', 0))))
-        l = int(safe_float(row.get('L', row.get('P', 0))))
-        p['wdl'] = f"{w}G-{d}E-{l}P"
+        rk = col(row, 'Rk', 'Pos', '#', default=0)
+        if rk: p['position'] = int(rk)
+        pts = col(row, 'Pts', default=0)
+        if pts: p['points'] = int(pts)
+        w = int(col(row, 'W', 'G', 'GW', default=0))
+        d = int(col(row, 'D', 'E', 'GD', default=0))
+        l = int(col(row, 'L', 'P', 'GL', default=0))
+        if w + d + l > 0:
+            p['wdl'] = f"{w}G-{d}E-{l}P"
+        p['data_sources'].append('Tabla General')
 
-    # ── 2. Standard Squad ─────────────────────────────────────────────────────
+    # ── 2. Standard Squad ────────────────────────────────────────────────────
     row = get_team_row("Standard Squad", squad_name)
     if row is not None:
-        mp_s = max(safe_float(row.get('MP', p['mp'])), 1)
+        mp_s = max(col(row, 'MP', default=p['mp']), 1)
         p['mp'] = int(mp_s)
-        p['gf_pg'] = per_game(row.get('GF', row.get('Gls', p['gf_pg'] * mp_s)), mp_s)
-        xg = safe_float(row.get('xG', 0))
-        p['xg_pg'] = xg / mp_s if xg > 4 else xg
+        # Goles: puede venir como GF (liga table) o Gls (squad stats)
+        gf_raw = col(row, 'GF', 'Gls', default=0)
+        if gf_raw > 0:
+            p['gf_pg'] = to_per_game(gf_raw, mp_s, typical_per_game=1.5)
+        # xG: FBRef a veces duplica la columna como xG y xG.1 (per90 version)
+        # Intentamos ambas; preferimos la que sea consistente con MP
+        xg_raw = col(row, 'xG', 'xG.1', 'Expected xG', default=0)
+        if xg_raw > 0:
+            p['xg_pg'] = to_per_game(xg_raw, mp_s, typical_per_game=1.2)
+        p['data_sources'].append('Standard Squad')
 
-    # ── 3. Standard Opp ───────────────────────────────────────────────────────
+    # ── 3. Standard Opp ──────────────────────────────────────────────────────
     row = get_team_row("Standard Opp", squad_name)
     if row is not None:
-        mp_o = max(safe_float(row.get('MP', p['mp'])), 1)
-        p['ga_pg'] = per_game(row.get('GA', row.get('Gls', p['ga_pg'] * mp_o)), mp_o)
-        xga = safe_float(row.get('xGA', row.get('xG', 0)))
-        p['xga_pg'] = xga / mp_o if xga > 4 else xga
+        mp_o = max(col(row, 'MP', default=p['mp']), 1)
+        ga_raw = col(row, 'GA', 'Gls', default=0)
+        if ga_raw > 0:
+            p['ga_pg'] = to_per_game(ga_raw, mp_o, typical_per_game=1.2)
+        # xGA: puede llamarse xGA o xG en tablas de oponentes
+        xga_raw = col(row, 'xGA', 'xG', 'xG.1', 'Expected xGA', default=0)
+        if xga_raw > 0:
+            p['xga_pg'] = to_per_game(xga_raw, mp_o, typical_per_game=1.2)
+        p['data_sources'].append('Standard Opp')
 
-    # ── 4. Shooting Squad ─────────────────────────────────────────────────────
+    # ── 4. Shooting Squad ────────────────────────────────────────────────────
     row = get_team_row("Shooting Squad", squad_name)
     if row is not None:
-        mp90 = max(safe_float(row.get('90s', p['mp'])), 1)
-        sh   = safe_float(row.get('Sh', 0))
-        sot  = safe_float(row.get('SoT', 0))
-        npxg = safe_float(row.get('npxG', 0))
-        g_sh = safe_float(row.get('G/Sh', 0))
-        p['sh_pg']   = sh  / mp90 if sh  > 4 else sh
-        p['sot_pg']  = sot / mp90 if sot > 4 else sot
-        p['npxg_pg'] = npxg / mp90 if npxg > 4 else npxg
-        p['g_sh']    = g_sh
-        p['sot_pct'] = (sot / sh * 100) if sh > 0 else safe_float(row.get('SoT%', 0))
+        # FBRef Shooting usa '90s' (partidos jugados como 90 mins)
+        mp90 = max(col(row, '90s', 'MP', default=p['mp']), 1)
+        sh_raw   = col(row, 'Sh', default=0)
+        sot_raw  = col(row, 'SoT', default=0)
+        # npxG: columna propia o puede aparecer como npxG.1
+        npxg_raw = col(row, 'npxG', 'npxG.1', 'np:xG', default=0)
+        # xG de Shooting — preferimos esta sobre Standard porque es más precisa
+        xg_sh_raw = col(row, 'xG', 'xG.1', default=0)
+        g_sh_raw = col(row, 'G/Sh', 'G-Sh', default=0)
+        sot_pct_raw = col(row, 'SoT%', default=0)
 
-    # ── 5. Shooting Opp ───────────────────────────────────────────────────────
+        if sh_raw  > 0: p['sh_pg']   = to_per_game(sh_raw,  mp90, typical_per_game=10.0)
+        if sot_raw > 0: p['sot_pg']  = to_per_game(sot_raw, mp90, typical_per_game=4.0)
+        if npxg_raw> 0: p['npxg_pg'] = to_per_game(npxg_raw, mp90, typical_per_game=1.2)
+        if xg_sh_raw>0:
+            p['xg_sh_pg'] = to_per_game(xg_sh_raw, mp90, typical_per_game=1.2)
+            # Si Standard Squad no tenía xG, usamos este
+            if p['xg_pg'] == 0:
+                p['xg_pg'] = p['xg_sh_pg']
+        p['g_sh'] = g_sh_raw
+        if sot_raw > 0 and sh_raw > 0:
+            p['sot_pct'] = (sot_raw / sh_raw * 100)
+        elif sot_pct_raw > 0:
+            p['sot_pct'] = sot_pct_raw
+        p['data_sources'].append('Shooting Squad')
+
+    # ── 5. Shooting Opp ──────────────────────────────────────────────────────
     row = get_team_row("Shooting Opp", squad_name)
     if row is not None:
-        mp90o = max(safe_float(row.get('90s', p['mp'])), 1)
-        opp_sh  = safe_float(row.get('Sh', 0))
-        opp_sot = safe_float(row.get('SoT', 0))
-        p['opp_sh_pg']  = opp_sh  / mp90o if opp_sh  > 4 else opp_sh
-        p['opp_sot_pg'] = opp_sot / mp90o if opp_sot > 4 else opp_sot
-        p['opp_sot_pct'] = (opp_sot / opp_sh * 100) if opp_sh > 0 else safe_float(row.get('SoT%', 0))
+        mp90o = max(col(row, '90s', 'MP', default=p['mp']), 1)
+        opp_sh_raw  = col(row, 'Sh', default=0)
+        opp_sot_raw = col(row, 'SoT', default=0)
+        # xGA desde Shooting Opp — más granular que Standard Opp
+        xga_sh_raw = col(row, 'xG', 'xG.1', default=0)
+        if opp_sh_raw  > 0: p['opp_sh_pg']  = to_per_game(opp_sh_raw,  mp90o, 10.0)
+        if opp_sot_raw > 0: p['opp_sot_pg'] = to_per_game(opp_sot_raw, mp90o, 4.0)
+        if xga_sh_raw  > 0 and p['xga_pg'] == 0:
+            p['xga_pg'] = to_per_game(xga_sh_raw, mp90o, 1.2)
+        if opp_sh_raw > 0 and opp_sot_raw > 0:
+            p['opp_sot_pct'] = (opp_sot_raw / opp_sh_raw * 100)
+        p['data_sources'].append('Shooting Opp')
 
-    # ── 6. Misc Squad ─────────────────────────────────────────────────────────
+    # ── 6. Misc Squad ────────────────────────────────────────────────────────
     row = get_team_row("Misc Squad", squad_name)
     if row is not None:
-        mp90m = max(safe_float(row.get('90s', p['mp'])), 1)
-        fls  = safe_float(row.get('Fls', 0))
-        crdy = safe_float(row.get('CrdY', 0))
-        crdr = safe_float(row.get('CrdR', 0))
-        aer  = safe_float(row.get('Won%', row.get('Aerial Won%', 0)))
-        p['fouls_pg']    = fls  / mp90m if fls  > 5 else fls
-        p['yellows_pg']  = crdy / mp90m if crdy > 3 else crdy
-        p['reds_pg']     = crdr / mp90m if crdr > 1 else crdr
-        p['aerials_won_pct'] = aer
+        mp90m = max(col(row, '90s', 'MP', default=p['mp']), 1)
+        fls_raw  = col(row, 'Fls', default=0)
+        crdy_raw = col(row, 'CrdY', default=0)
+        crdr_raw = col(row, 'CrdR', default=0)
+        aer_raw  = col(row, 'Won%', 'Aerial Won%', 'Aerials Won%', default=0)
+        if fls_raw  > 0: p['fouls_pg']   = to_per_game(fls_raw,  mp90m, 8.0)
+        if crdy_raw > 0: p['yellows_pg'] = to_per_game(crdy_raw, mp90m, 2.0)
+        if crdr_raw > 0: p['reds_pg']    = to_per_game(crdr_raw, mp90m, 0.5)
+        if aer_raw  > 0: p['aerials_won_pct'] = aer_raw
+        p['data_sources'].append('Misc Squad')
 
-    # ── 7. Misc Opp ───────────────────────────────────────────────────────────
+    # ── 7. Misc Opp ──────────────────────────────────────────────────────────
     row = get_team_row("Misc Opp", squad_name)
     if row is not None:
-        mp90mo = max(safe_float(row.get('90s', p['mp'])), 1)
-        opp_fls = safe_float(row.get('Fls', 0))
-        p['opp_fouls_pg'] = opp_fls / mp90mo if opp_fls > 5 else opp_fls
+        mp90mo = max(col(row, '90s', 'MP', default=p['mp']), 1)
+        opp_fls_raw = col(row, 'Fls', default=0)
+        if opp_fls_raw > 0:
+            p['opp_fouls_pg'] = to_per_game(opp_fls_raw, mp90mo, 8.0)
+        p['data_sources'].append('Misc Opp')
 
-    # ── PlayingTime Squad/Opp – informacional, no afecta modelo directamente ──
-    # (podrías usar % de minutos del top-scorer para ajustar si está lesionado)
+    # ── Lambda blend ─────────────────────────────────────────────────────────
+    # Jerarquía de fuentes de ataque:
+    #   npxG (más puro, sin penales) > xG > goles reales
+    # Cuando hay varias fuentes, el blend pondera más las basadas en xG
+    # porque son menos ruidosas que goles (n pequeño en Liga MX ~17 jornadas).
+    #
+    # Pesos base: goles=0.40, xG=0.40, npxG=0.20
+    # Si solo hay goles: lambda = goles (sin modificar)
+    # Si hay xG pero no npxG: lambda = 0.5*goles + 0.5*xG
+    # Si hay los tres: lambda = 0.35*goles + 0.40*xG + 0.25*npxG
 
-    # ── Lambdas para modelo Poisson ───────────────────────────────────────────
-    # Blend: 50% goles reales, 30% xG, 20% npxG (cuando están disponibles)
-    att_sources = [x for x in [p['gf_pg'], p['xg_pg'], p['npxg_pg']] if x > 0.01]
-    weights = [0.5, 0.35, 0.15][:len(att_sources)]
-    total_w = sum(weights[:len(att_sources)])
-    p['lambda_att'] = sum(a * w for a, w in zip(att_sources, weights)) / total_w if att_sources else p['gf_pg']
+    gf  = p['gf_pg']   if p['gf_pg']   > 0.01 else None
+    xg  = p['xg_pg']   if p['xg_pg']   > 0.01 else None
+    npx = p['npxg_pg'] if p['npxg_pg'] > 0.01 else None
 
-    def_sources = [x for x in [p['ga_pg'], p['xga_pg']] if x > 0.01]
-    p['lambda_def'] = sum(def_sources) / len(def_sources) if def_sources else p['ga_pg']
+    if   gf and xg and npx: p['lambda_att'] = 0.35*gf + 0.40*xg + 0.25*npx
+    elif gf and xg:          p['lambda_att'] = 0.50*gf + 0.50*xg
+    elif gf:                 p['lambda_att'] = gf
+    else:                    p['lambda_att'] = 1.5
+
+    ga  = p['ga_pg']   if p['ga_pg']   > 0.01 else None
+    xga = p['xga_pg']  if p['xga_pg']  > 0.01 else None
+
+    if   ga and xga: p['lambda_def'] = 0.50*ga + 0.50*xga
+    elif ga:         p['lambda_def'] = ga
+    else:            p['lambda_def'] = 1.1
 
     return p
 
@@ -680,6 +773,21 @@ _gc_v = (prof_v['lambda_def'] if prof_v else 1.2)
 
 lam_l = max(0.1, (_gf_l + _gc_v) / 2)
 lam_v = max(0.1, (_gf_v + _gc_l) / 2)
+
+# Mostrar fuentes del blend
+if prof_l and prof_v:
+    def _blend_label(p):
+        parts = []
+        if p['gf_pg']   > 0.01: parts.append("Goles")
+        if p['xg_pg']   > 0.01: parts.append("xG")
+        if p['npxg_pg'] > 0.01: parts.append("npxG")
+        return "+".join(parts) if parts else "default"
+    blend_l = _blend_label(prof_l)
+    blend_v = _blend_label(prof_v)
+    st.caption(
+        f"λ {lname_short} = **{lam_l:.3f}** ({blend_l})  ·  "
+        f"λ {vname_short} = **{lam_v:.3f}** ({blend_v})"
+    )
 
 # ─── POISSON ──────────────────────────────────────────────────────────────────
 p_l, p_v, p_e, matrix = calc_poisson(lam_l, lam_v)
