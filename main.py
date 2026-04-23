@@ -1,8 +1,9 @@
 import streamlit as st
 import pandas as pd
 import math
+import io
 
-# Configuración Wide para tu monitor de 34"
+# Configuración para tu monitor de 34"
 st.set_page_config(page_title="Jorge - Betting Intelligence", layout="wide")
 
 # Inicializar sesión
@@ -10,68 +11,51 @@ if 'banca_actual' not in st.session_state:
     st.session_state.banca_actual = 1000.0
 
 # --- BARRA LATERAL ---
-st.sidebar.header("⚙️ Configuración y Datos")
+st.sidebar.header("⚙️ Gestión de Capital")
 banca_base = st.sidebar.number_input("💰 Banca Inicial", min_value=0.0, value=1000.0)
 st.sidebar.metric("🏦 Banca Actual", f"${st.session_state.banca_actual:.2f}")
 
-# NUEVO: Cargador de FBRef
 st.sidebar.markdown("---")
-st.sidebar.subheader("📊 Importar de FBRef")
-uploaded_file = st.sidebar.file_uploader("Sube el CSV de FBRef (Squad Stats)", type=["csv"])
+st.sidebar.subheader("📊 Pegar Datos de FBRef")
+st.sidebar.caption("Copia la tabla de FBRef y pégala aquí abajo:")
+raw_data = st.sidebar.text_area("Pegar (Ctrl+V)", height=150, help="Copia desde el nombre del equipo hasta el final de la fila.")
 
-# Procesar datos de FBRef si existen
+# Procesar el pegado manual
 df_stats = None
-if uploaded_file:
+if raw_data:
     try:
-        df_stats = pd.read_csv(uploaded_file)
-        st.sidebar.success("✅ Datos cargados")
-    except Exception as e:
-        st.sidebar.error("Error al leer el archivo")
+        # FBRef al copiar y pegar suele usar tabuladores (\t)
+        df_stats = pd.read_csv(io.StringIO(raw_data), sep='\t')
+        st.sidebar.success(f"✅ {len(df_stats)} equipos detectados")
+    except:
+        try:
+            # Intento alternativo por espacios si el tabulador falla
+            df_stats = pd.read_csv(io.StringIO(raw_data), sep='\s\s+', engine='python')
+            st.sidebar.success(f"✅ {len(df_stats)} equipos detectados")
+        except:
+            st.sidebar.error("Error al procesar el pegado. Intenta copiar de nuevo.")
 
 fractional_kelly = st.sidebar.slider("📉 Agresividad Kelly", 0.05, 1.0, 0.25)
 
 # --- CUERPO PRINCIPAL ---
-st.title("🚀 Inteligencia de Apuestas: FBRef + Poisson")
+st.title("🚀 Inteligencia de Apuestas: Poisson + Pegado Directo")
 
-# 1. MODELO POISSON CON AUTO-COMPLETE
-st.header("1️⃣ Modelo de Probabilidad (Estadística)")
-c_team1, c_team2 = st.columns(2)
-
-# Valores por defecto
-l_f, l_c, v_f, v_c = 1.5, 1.1, 1.0, 1.2
-
-if df_stats is not None:
-    # Intentar identificar columnas de goles (ajusta según el CSV de FBRef)
-    # FBRef suele usar 'Gls' o 'Scored'
-    equipos = df_stats.iloc[:, 0].unique() # Primera columna suele ser el nombre del equipo
-    
-    with c_team1:
-        local_sel = st.selectbox("Selecciona Local", equipos)
-        row_l = df_stats[df_stats.iloc[:, 0] == local_sel].iloc[0]
-        # Asumiendo que buscamos promedios por partido (Gls/90 o similar)
-        st.info(f"Datos detectados para {local_sel}")
-        
-    with c_team2:
-        visita_sel = st.selectbox("Selecciona Visita", equipos)
-        row_v = df_stats[df_stats.iloc[:, 0] == visita_sel].iloc[0]
-        st.info(f"Datos detectados para {visita_sel}")
-    
-    # Aquí puedes mapear las columnas específicas de tu CSV de FBRef
-    # Por ahora dejamos manual pero con la opción de ver los datos cargados
-    st.write("**Vista previa de estadísticas cargadas:**")
-    st.dataframe(df_stats.head(3))
-else:
-    st.warning("👈 Sube un CSV de FBRef en la barra lateral para automatizar. Mientras tanto, ingresa datos manuales:")
-
+# 1. MODELO POISSON
+st.header("1️⃣ Modelo de Probabilidad")
 cp1, cp2 = st.columns(2)
-with cp1:
-    g_l_f = cp1.number_input("Goles Favor Local", value=1.5)
-    g_l_c = cp1.number_input("Goles Contra Local", value=1.1)
-with cp2:
-    g_v_f = cp2.number_input("Goles Favor Visita", value=1.0)
-    g_v_c = cp2.number_input("Goles Contra Visita", value=1.2)
 
-# Cálculo Poisson
+# Si hay datos pegados, mostramos los promedios para facilitar
+if df_stats is not None:
+    st.write("**Datos Pegados (Referencia):**")
+    st.dataframe(df_stats.head(5))
+
+with cp1:
+    g_l_f = st.number_input("Goles Favor Local (xG o Gls)", value=1.5, step=0.1)
+    g_l_c = st.number_input("Goles Contra Local", value=1.1, step=0.1)
+with cp2:
+    g_v_f = st.number_input("Goles Favor Visita (xG o Gls)", value=1.0, step=0.1)
+    g_v_c = st.number_input("Goles Contra Visita", value=1.2, step=0.1)
+
 def calc_poisson(gf_l, gc_l, gf_v, gc_v):
     lam_l, lam_v = (gf_l + gc_v)/2, (gf_v + gc_l)/2
     p_l, p_v, p_e = 0, 0, 0
@@ -84,13 +68,13 @@ def calc_poisson(gf_l, gc_l, gf_v, gc_v):
     return p_l, p_v, p_e
 
 p_l_p, p_v_p, p_e_p = calc_poisson(g_l_f, g_l_c, g_v_f, g_v_c)
-st.success(f"Probabilidad Sugerida: L {p_l_p*100:.1f}% | V {p_v_p*100:.1f}% | E {p_e_p*100:.1f}%")
+st.success(f"Probabilidad: L {p_l_p*100:.1f}% | V {p_v_p*100:.1f}% | E {p_e_p*100:.1f}%")
 
 st.markdown("---")
 
 # 2. COMPARATIVA DE MOMIOS
 st.header("2️⃣ Comparativa de Momios")
-col_n, col_c1, col_c2 = st.columns([1, 2, 2])
+col_c1, col_c2 = st.columns(2)
 with col_c1:
     m_l1 = st.number_input("L-Casa A", value=2.10)
     m_v1 = st.number_input("V-Casa A", value=3.50)
@@ -102,7 +86,7 @@ with col_c2:
 
 best_l, best_v, best_e = max(m_l1, m_l2), max(m_v1, m_v2), max(m_e1, m_e2)
 
-# 3. MODELO DE VALOR
+# 3. ANÁLISIS DE VALOR
 st.header("3️⃣ Análisis de Valor")
 p_l_f = st.number_input("% Local Final", value=float(p_l_p*100))
 p_v_f = st.number_input("% Visita Final", value=float(p_v_p*100))
@@ -126,7 +110,7 @@ if st.button("📊 ANALIZAR"):
 # 4. CIERRE
 st.markdown("---")
 res_real = st.radio("Resultado Final:", ["Local", "Visita", "Empate"], horizontal=True)
-if st.button("💰 Calcular"):
+if st.button("💰 Calcular y Actualizar"):
     gan = 0
     if res_real == "Local": gan = (s_l * best_l) - s_l - s_v - s_e
     elif res_real == "Visita": gan = (s_v * best_v) - s_v - s_l - s_e
