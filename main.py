@@ -576,7 +576,7 @@ st.markdown(f"""
     <span class="ip-header-tag">{tables_loaded_total}/9 tablas cargadas</span>
 </div>""", unsafe_allow_html=True)
 
-# ─── SELECTOR DE EQUIPOS ──────────────────────────────────────────────────────
+# ─── SELECTOR DE EQUIPOS + MOMIOS ────────────────────────────────────────────
 equipos_lista = ["— seleccionar —"]
 if st.session_state.data_master:
     first_df = next(iter(st.session_state.data_master.values()))
@@ -584,14 +584,36 @@ if st.session_state.data_master:
         equipos_lista += sorted(first_df['Squad'].dropna().unique().tolist())
 
 st.markdown('<div class="sec-label">01 · Encuentro</div>', unsafe_allow_html=True)
-col_l, col_vs, col_v = st.columns([5, 1, 5])
 
+# Fila 1: selectores de equipo
+col_l, col_vs, col_v = st.columns([5, 1, 5])
 with col_l:
     local_sel = st.selectbox("Local", equipos_lista, key="local_sel", label_visibility="collapsed")
 with col_vs:
     st.markdown("<br><div style='text-align:center;font-size:0.75rem;color:#a8a29e;font-family:DM Mono,monospace;padding-top:8px;'>vs</div>", unsafe_allow_html=True)
 with col_v:
     visita_sel = st.selectbox("Visitante", equipos_lista, key="visita_sel", label_visibility="collapsed")
+
+lname_short = local_sel[:14]  if local_sel  != "— seleccionar —" else "Local"
+vname_short = visita_sel[:14] if visita_sel != "— seleccionar —" else "Visita"
+
+# Fila 2: momios (inmediatamente debajo, misma sección)
+st.markdown('<div style="margin-top:2px;"></div>', unsafe_allow_html=True)
+mc1, mc2, mc3 = st.columns(3)
+with mc1:
+    m_l = st.number_input(f"Momio {lname_short}", value=2.0, format="%.2f", min_value=1.01, key="m_l")
+with mc2:
+    m_e = st.number_input("Momio Empate", value=3.0, format="%.2f", min_value=1.01, key="m_e")
+with mc3:
+    m_v = st.number_input(f"Momio {vname_short}", value=3.0, format="%.2f", min_value=1.01, key="m_v")
+
+# Probabilidades implícitas
+impl_l = (1/m_l)*100; impl_e = (1/m_e)*100; impl_v = (1/m_v)*100
+overround = impl_l + impl_e + impl_v
+ic1, ic2, ic3 = st.columns(3)
+with ic1: st.caption(f"Implícita: {impl_l:.1f}%")
+with ic2: st.caption(f"Implícita: {impl_e:.1f}%  ·  OR: {overround:.1f}%")
+with ic3: st.caption(f"Implícita: {impl_v:.1f}%")
 
 # ─── PERFILES ─────────────────────────────────────────────────────────────────
 prof_l = build_team_profile(local_sel)  if local_sel  != "— seleccionar —" else None
@@ -650,46 +672,14 @@ if prof_l and prof_v:
             st.markdown(f'<p style="font-size:0.65rem;font-weight:600;color:#a8a29e;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px;">🛡️ Defensa · Disciplina</p>{defn}', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-# ─── AJUSTE MANUAL ────────────────────────────────────────────────────────────
-st.markdown('<div class="sec-label">03 · Parámetros del Modelo</div>', unsafe_allow_html=True)
+# ─── LAMBDAS (automático desde perfiles) ─────────────────────────────────────
+_gf_l = (prof_l['lambda_att'] if prof_l else 1.5)
+_gc_l = (prof_l['lambda_def'] if prof_l else 1.1)
+_gf_v = (prof_v['lambda_att'] if prof_v else 1.0)
+_gc_v = (prof_v['lambda_def'] if prof_v else 1.2)
 
-default_gf_l = prof_l['gf_pg']   if prof_l else 1.5
-default_gc_l = prof_l['ga_pg']   if prof_l else 1.1
-default_gf_v = prof_v['gf_pg']   if prof_v else 1.0
-default_gc_v = prof_v['ga_pg']   if prof_v else 1.2
-
-# Si tenemos lambdas calculados, usarlos como default
-if prof_l and prof_v:
-    lam_att_l = prof_l['lambda_att']
-    lam_def_l = prof_l['lambda_def']
-    lam_att_v = prof_v['lambda_att']
-    lam_def_v = prof_v['lambda_def']
-    default_gf_l = lam_att_l
-    default_gc_l = lam_def_l
-    default_gf_v = lam_att_v
-    default_gc_v = lam_def_v
-
-mp1, mp2, mp3, mp4 = st.columns(4)
-with mp1:
-    lname = local_sel if local_sel != "— seleccionar —" else "Local"
-    g_l_f = st.number_input(f"Atq {lname[:10]}", value=round(float(default_gf_l), 2), format="%.2f", min_value=0.1, max_value=5.0)
-with mp2:
-    g_l_c = st.number_input(f"Def {lname[:10]}", value=round(float(default_gc_l), 2), format="%.2f", min_value=0.1, max_value=5.0)
-with mp3:
-    vname = visita_sel if visita_sel != "— seleccionar —" else "Visita"
-    g_v_f = st.number_input(f"Atq {vname[:10]}", value=round(float(default_gf_v), 2), format="%.2f", min_value=0.1, max_value=5.0)
-with mp4:
-    g_v_c = st.number_input(f"Def {vname[:10]}", value=round(float(default_gc_v), 2), format="%.2f", min_value=0.1, max_value=5.0)
-
-# Lambdas
-lam_l = max(0.1, (g_l_f + g_v_c) / 2)
-lam_v = max(0.1, (g_v_f + g_l_c) / 2)
-
-if prof_l and prof_v:
-    st.caption(
-        f"λ Local = {lam_l:.3f}  ·  λ Visita = {lam_v:.3f}"
-        + (f"  ·  xG blend: {prof_l['xg_pg']:.2f} / {prof_v['xg_pg']:.2f}" if prof_l['xg_pg'] > 0 else "  ·  sin xG (carga Shooting Squad)")
-    )
+lam_l = max(0.1, (_gf_l + _gc_v) / 2)
+lam_v = max(0.1, (_gf_v + _gc_l) / 2)
 
 # ─── POISSON ──────────────────────────────────────────────────────────────────
 p_l, p_v, p_e, matrix = calc_poisson(lam_l, lam_v)
@@ -699,13 +689,11 @@ under25 = 1 - over25
 btts    = sum(v for (i,j), v in matrix.items() if i > 0 and j > 0)
 over15  = sum(v for (i,j), v in matrix.items() if i+j > 1)
 
-st.markdown('<div class="sec-label">04 · Probabilidades</div>', unsafe_allow_html=True)
+st.markdown('<div class="sec-label">03 · Probabilidades</div>', unsafe_allow_html=True)
 
 # Barras de probabilidad
 pc1, pc2 = st.columns([3, 2])
 with pc1:
-    lname_short = local_sel[:15] if local_sel != "— seleccionar —" else "Local"
-    vname_short = visita_sel[:15] if visita_sel != "— seleccionar —" else "Visita"
     for label, prob, color in [
         (f"🏠 {lname_short}", p_l, "#4f46e5"),
         ("🤝 Empate",          p_e, "#78716c"),
@@ -732,13 +720,8 @@ with pc2:
         <div class="ou-pill"><div class="ou-val" style="color:#0891b2;">{over15*100:.1f}%</div><div class="ou-lbl">Over 1.5</div></div>
     </div>""", unsafe_allow_html=True)
 
-# ─── MOMIOS + PICKS ───────────────────────────────────────────────────────────
-st.markdown('<div class="sec-label">05 · Momios y Valor Esperado</div>', unsafe_allow_html=True)
-
-mc1, mc2, mc3 = st.columns(3)
-with mc1: m_l = st.number_input("Local",  value=2.0, format="%.2f", min_value=1.01)
-with mc2: m_e = st.number_input("Empate", value=3.0, format="%.2f", min_value=1.01)
-with mc3: m_v = st.number_input("Visita", value=3.0, format="%.2f", min_value=1.01)
+# ─── PICKS ────────────────────────────────────────────────────────────────────
+st.markdown('<div class="sec-label">04 · Valor Esperado</div>', unsafe_allow_html=True)
 
 picks_data = [
     (lname_short, p_l, m_l),
@@ -787,7 +770,7 @@ if local_sel != "— seleccionar —" and visita_sel != "— seleccionar —":
 
 # ─── GESTIÓN DE JORNADA ───────────────────────────────────────────────────────
 if st.session_state.jornada_pendientes:
-    st.markdown('<div class="sec-label">06 · Jornada Activa</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec-label">05 · Jornada Activa</div>', unsafe_allow_html=True)
     total_exp = sum(a['stake'] for a in st.session_state.jornada_pendientes)
     st.caption(f"{len(st.session_state.jornada_pendientes)} apuesta(s) · Exposición total: {fmt_money(total_exp)}")
 
@@ -816,7 +799,7 @@ if st.session_state.jornada_pendientes:
 
 # ─── HISTORIAL ────────────────────────────────────────────────────────────────
 if st.session_state.historial:
-    st.markdown('<div class="sec-label">07 · Historial</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec-label">06 · Historial</div>', unsafe_allow_html=True)
     df_h = pd.DataFrame(st.session_state.historial)
     # Colorear estado
     ganadas = (df_h['estado'] == 'GANADA').sum()
