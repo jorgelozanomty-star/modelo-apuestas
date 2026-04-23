@@ -94,13 +94,13 @@ st.header("2️⃣ Comparativa Multi-Casa")
 col_bk1, col_bk2 = st.columns(2)
 
 with col_bk1:
-    st.subheader("Casa A (Caliente)")
+    st.subheader("Team Mexico")
     m_l1 = st.number_input("L - Casa A", value=2.0)
     m_e1 = st.number_input("E - Casa A", value=3.2)
     m_v1 = st.number_input("V - Casa A", value=3.0)
 
 with col_bk2:
-    st.subheader("Casa B (Bet365)")
+    st.subheader("Caliente")
     m_l2 = st.number_input("L - Casa B", value=2.05)
     m_e2 = st.number_input("E - Casa B", value=3.1)
     m_v2 = st.number_input("V - Casa B", value=3.15)
