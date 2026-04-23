@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
 
-# Configuración para monitor Wide
-st.set_page_config(page_title="Gestor Pro Apuestas - Jorge", layout="wide")
+# Configuración Wide para tu monitor Xiaomi
+st.set_page_config(page_title="Jorge - Betting Intelligence", layout="wide")
 
 # --- BARRA LATERAL ---
 st.sidebar.header("⚙️ Configuración")
@@ -22,33 +22,53 @@ else:
 st.sidebar.write(f"**Decimal:** `{res_decimal:.3f}` | **Win Rate:** `{(1/res_decimal)*100:.1f}%`")
 
 # --- CUERPO PRINCIPAL ---
-st.title("🎯 Estrategia Maestra: Valor + Arbitraje")
+st.title("🚀 Inteligencia de Apuestas: Multi-Casa")
 
-# 1. ANÁLISIS DE LA CASA
-st.header("1️⃣ Análisis de la Casa")
-c1, c2, c3 = st.columns(3)
-with c1:
-    local = st.text_input("Local", "Tigres")
-    m_l = st.number_input(f"Momio {local}", value=2.10, step=0.01)
-with c2:
-    visita = st.text_input("Visita", "Atlas")
-    m_v = st.number_input(f"Momio {visita}", value=3.50, step=0.01)
-with c3:
-    m_e = st.number_input("Momio Empate", value=3.20, step=0.01)
+# 1. ANÁLISIS MULTI-CASA
+st.header("1️⃣ Comparativa de Momios")
+col_n, col_c1, col_c2 = st.columns([1, 2, 2])
 
-p_l, p_v, p_e = 1/m_l, 1/m_v, 1/m_e
-payout_total = p_l + p_v + p_e
+with col_n:
+    st.write("### ") # Espacio
+    st.write("**Local**")
+    st.write("**Visita**")
+    st.write("**Empate**")
+
+with col_c1:
+    bookie1 = st.text_input("Casa A (ej. Caliente)", "Caliente")
+    m_l1 = st.number_input(f"L - {bookie1}", value=2.10, step=0.01, label_visibility="collapsed")
+    m_v1 = st.number_input(f"V - {bookie1}", value=3.50, step=0.01, label_visibility="collapsed")
+    m_e1 = st.number_input(f"E - {bookie1}", value=3.20, step=0.01, label_visibility="collapsed")
+
+with col_c2:
+    bookie2 = st.text_input("Casa B (ej. Bet365)", "Bet365")
+    m_l2 = st.number_input(f"L - {bookie2}", value=2.15, step=0.01, label_visibility="collapsed")
+    m_v2 = st.number_input(f"V - {bookie2}", value=3.40, step=0.01, label_visibility="collapsed")
+    m_e2 = st.number_input(f"E - {bookie2}", value=3.25, step=0.01, label_visibility="collapsed")
+
+# Escoger el mejor momio disponible
+best_l = max(m_l1, m_l2)
+best_v = max(m_v1, m_v2)
+best_e = max(m_e1, m_e2)
+
+# Cálculo de Margen con los mejores momios
+payout_total = (1/best_l) + (1/best_v) + (1/best_e)
 margen = (payout_total - 1) * 100
-st.markdown(f"**Margen de la Casa (Vig):** `{margen:.2f}%` {'🔥 ARBITRAJE' if margen < 0 else ''}")
+
+st.info(f"💡 **Mejor Payout Detectado:** Usando lo mejor de ambas casas, el margen es de `{margen:.2f}%`.")
+
+if margen < 0:
+    st.balloons()
+    st.success(f"🔥 ¡ARBITRAJE DETECTADO! Margen negativo: {margen:.2f}%.")
 
 st.markdown("---")
 
 # 2. TU MODELO
-st.header("2️⃣ Tu Modelo vs La Casa")
+st.header("2️⃣ Tu Modelo vs El Mercado")
 col_l, col_v, col_e = st.columns(3)
-with col_l: prob_l = st.number_input(f"% {local}", value=float(f"{(p_l/payout_total)*100:.1f}"))
-with col_v: prob_v = st.number_input(f"% {visita}", value=float(f"{(p_v/payout_total)*100:.1f}"))
-with col_e: prob_e = st.number_input("% Empate", value=float(f"{(p_e/payout_total)*100:.1f}"))
+with col_l: prob_l = st.number_input(f"% Prob Local", value=float(f"{( (1/best_l)/payout_total )*100:.1f}"))
+with col_v: prob_v = st.number_input(f"% Prob Visita", value=float(f"{( (1/best_v)/payout_total )*100:.1f}"))
+with col_e: prob_e = st.number_input("% Prob Empate", value=float(f"{( (1/best_e)/payout_total )*100:.1f}"))
 
 def get_kelly(p_mia, momio):
     p = p_mia / 100
@@ -56,61 +76,37 @@ def get_kelly(p_mia, momio):
     f = (b * p - (1 - p)) / b if b > 0 else 0
     return max(0, f * fractional_kelly)
 
-# Almacenar sugerencias para la simulación
-stake_l = banca_total * get_kelly(prob_l, m_l)
-stake_v = banca_total * get_kelly(prob_v, m_v)
-stake_e = banca_total * get_kelly(prob_e, m_e)
+# Stakes calculados sobre los mejores momios
+stake_l = banca_total * get_kelly(prob_l, best_l)
+stake_v = banca_total * get_kelly(prob_v, best_v)
+stake_e = banca_total * get_kelly(prob_e, best_e)
 
-if st.button("📊 GENERAR PLAN DE APUESTA"):
+if st.button("📊 ANALIZAR VALOR"):
     st.markdown("---")
     res_cols = st.columns(3)
-    equipos = [(local, prob_l, m_l, stake_l), (visita, prob_v, m_v, stake_v), ("Empate", prob_e, m_e, stake_e)]
+    datos = [("Local", prob_l, best_l, stake_l), ("Visita", prob_v, best_v, stake_v), ("Empate", prob_e, best_e, stake_e)]
     
-    for i, (nom, p, m, s) in enumerate(equipos):
+    for i, (nom, p, m, s) in enumerate(datos):
         with res_cols[i]:
             ev = (p/100 * (m-1) * 100) - ((1-p/100) * 100)
             if ev > 0:
-                st.success(f"✅ {nom}")
+                st.success(f"✅ {nom} (Momio: {m})")
                 st.metric("EV", f"+${ev:.2f}")
                 st.metric("Stake Sugerido", f"${s:.2f}")
             else:
                 st.error(f"❌ {nom}")
-                st.caption(f"EV: ${ev:.2f}")
+                st.caption(f"Sin valor matemático.")
 
-    # --- GRÁFICAS ---
-    st.markdown("---")
-    st.subheader(f"📈 Curva de Rentabilidad ({local})")
-    data_plot = []
-    for var in range(-10, 11):
-        p_var = prob_l + var
-        if 0 <= p_var <= 100:
-            s_var = banca_total * get_kelly(p_var, m_l)
-            ev_var = (p_var/100 * (m_l-1) * 100) - ((1-p_var/100) * 100)
-            data_plot.append({"Prob (%)": p_var, "EV ($)": round(ev_var, 2), "Stake ($)": round(s_var, 2)})
-    df_plot = pd.DataFrame(data_plot).set_index("Prob (%)")
-    c_chart1, c_chart2 = st.columns(2)
-    with c_chart1: st.line_chart(df_plot["EV ($)"])
-    with c_chart2: st.line_chart(df_plot["Stake ($)"])
-
-# --- 3. SIMULADOR DE RESULTADO FINAL ---
+# 3. SIMULADOR
 st.markdown("---")
-st.header("3️⃣ Simulador de Resultado (Post-Partido)")
-resultado_real = st.radio("¿Quién ganó el partido?", [local, visita, "Empate"], horizontal=True)
+st.header("3️⃣ Simulador de Cierre")
+res_real = st.radio("Resultado Final:", ["Local", "Visita", "Empate"], horizontal=True)
 
-if st.button("💰 Calcular Utilidad"):
-    ganancia = 0
-    # Calcular según lo que el modelo sugirió apostar
-    if resultado_real == local:
-        ganancia = (stake_l * m_l) - stake_l - stake_v - stake_e
-    elif resultado_real == visita:
-        ganancia = (stake_v * m_v) - stake_v - stake_l - stake_e
-    else:
-        ganancia = (stake_e * m_e) - stake_e - stake_l - stake_v
+if st.button("💰 Calcular"):
+    gan = 0
+    if res_real == "Local": gan = (stake_l * best_l) - stake_l - stake_v - stake_e
+    elif res_real == "Visita": gan = (stake_v * best_v) - stake_v - stake_l - stake_e
+    else: gan = (stake_e * best_e) - stake_e - stake_l - stake_v
     
-    if ganancia >= 0:
-        st.balloons()
-        st.success(f"🎊 ¡Ganancia Neta: +${ganancia:.2f}!")
-    else:
-        st.error(f"📉 Pérdida Neta: ${ganancia:.2f}")
-    
-    st.info(f"ROI de la operación: {(ganancia / (stake_l + stake_v + stake_e + 0.000001)) * 100:.2f}%")
+    if gan >= 0: st.success(f"Utilidad: +${gan:.2f}")
+    else: st.error(f"Balance: -${abs(gan):.2f}")
