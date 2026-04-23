@@ -39,7 +39,7 @@ with c3:
 p_l, p_v, p_e = 1/m_l, 1/m_v, 1/m_e
 payout_total = p_l + p_v + p_e
 margen = (payout_total - 1) * 100
-st.markdown(f"**Margen de la Casa:** `{margen:.2f}%` {'🔥 ARBITRAJE' if margen < 0 else ''}")
+st.markdown(f"**Margen de la Casa (Vig):** `{margen:.2f}%` {'🔥 ARBITRAJE' if margen < 0 else ''}")
 
 st.markdown("---")
 
@@ -72,18 +72,26 @@ if st.button("📊 GENERAR PLAN DE APUESTA"):
                 st.error(f"❌ {nom}")
                 st.caption(f"EV: ${ev:.2f}")
 
-    # --- NUEVA SECCIÓN: TABLA DE ESCENARIOS ---
+    # --- SECCIÓN DE SENSIBILIDAD ---
     st.markdown("---")
-    st.subheader("📉 Escenarios de Sensibilidad (Tigres)")
-    st.write("¿Qué pasa si tu probabilidad cambia un poco? Mira cómo varía el Stake recomendado:")
+    st.subheader(f"📈 Curva de Rentabilidad ({local})")
     
-    escenarios = []
-    # Genera variaciones de -5% a +5% de tu probabilidad actual para el Local
-    for var in range(-5, 6):
+    data_plot = []
+    for var in range(-10, 11):
         p_var = prob_l + var
-        stake_var = banca_total * get_kelly(p_var, m_l)
-        ev_var = (p_var/100 * (m_l-1) * 100) - ((1-p_var/100) * 100)
-        escenarios.append({"Probabilidad (%)": f"{p_var:.1f}%", "EV ($)": f"{ev_var:.2f}", "Stake Sugerido": f"${stake_var:.2f}"})
+        if 0 <= p_var <= 100:
+            stake_var = banca_total * get_kelly(p_var, m_l)
+            ev_var = (p_var/100 * (m_l-1) * 100) - ((1-p_var/100) * 100)
+            data_plot.append({"Prob (%)": p_var, "EV ($)": round(ev_var, 2), "Stake ($)": round(stake_var, 2)})
     
-    df_esc = pd.DataFrame(escenarios)
-    st.table(df_esc)
+    df_plot = pd.DataFrame(data_plot).set_index("Prob (%)")
+    
+    col_chart1, col_chart2 = st.columns(2)
+    with col_chart1:
+        st.write("**Evolución del EV ($)**")
+        st.line_chart(df_plot["EV ($)"])
+    with col_chart2:
+        st.write("**Evolución del Stake ($)**")
+        st.line_chart(df_plot["Stake ($)"])
+
+    st.table(df_plot.reset_index())
