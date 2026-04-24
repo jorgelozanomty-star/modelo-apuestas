@@ -274,6 +274,8 @@ def section_picks(ctx: dict, cfg: dict):
                 "momio":   chosen["momio"],
                 "stake":   round(chosen["stake"], 2),
                 "ev":      round(chosen["ev"], 2),
+                "prob":    round(chosen["prob"] * 100, 1),
+                "edge":    round(chosen["edge"], 1),
                 "estado":  "Pendiente",
             })
             st.rerun()

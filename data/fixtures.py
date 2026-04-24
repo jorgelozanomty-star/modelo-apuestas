@@ -167,4 +167,3 @@ def h2h_lambda_adjustment(h2h, lam_l, lam_v, weight=0.15):
     denom = hr+ar; h2h_share = hr/denom if denom>0 else 0.5
     adj = (h2h_share - model_share)*weight
     return round(max(0.1,lam_l*(1+adj)),3), round(max(0.1,lam_v*(1-adj)),3)
-

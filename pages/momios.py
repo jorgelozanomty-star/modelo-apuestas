@@ -1,0 +1,241 @@
+"""
+pages/momios.py
+Página 2 — Momios
+Tabla editable con todos los partidos de todas las ligas.
+Incluye lector de momios con Claude Vision.
+"""
+import streamlit as st
+import base64
+import json
+import requests
+from datetime import date, timedelta
+
+from data.session   import init, get_all_pending_matches, set_momios, get_momios, export_session
+from data.leagues   import LEAGUE_NAMES, LEAGUES
+from ui.styles      import inject_css
+
+init()
+inject_css()
+
+# ── Header ─────────────────────────────────────────────────────────────────────
+st.markdown("""
+<div class="app-header">
+  <span class="app-title">② Momios</span>
+  <span class="app-sub">Ingresa o escanea los momios de la jornada</span>
+</div>
+""", unsafe_allow_html=True)
+
+# ── Lector Claude Vision ───────────────────────────────────────────────────────
+with st.expander("📸 Lector automático — sube screenshots de Team Mexico"):
+    st.caption("Sube uno o varios screenshots (1X2 + Over/Under, y BTTS por separado). Claude extrae los momios automáticamente.")
+
+    uploaded_imgs = st.file_uploader(
+        "Screenshots", type=["png", "jpg", "jpeg"],
+        accept_multiple_files=True, label_visibility="collapsed",
+        key="momios_imgs",
+    )
+
+    if uploaded_imgs and st.button("🔍 Extraer momios con Claude", type="primary"):
+        with st.spinner("Claude está leyendo los momios…"):
+            try:
+                content = []
+                for img in uploaded_imgs:
+                    b64 = base64.b64encode(img.read()).decode()
+                    mime = img.type
+                    content.append({
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": mime, "data": b64}
+                    })
+                content.append({
+                    "type": "text",
+                    "text": """Analiza estas imágenes de una casa de apuestas deportivas.
+Extrae TODOS los partidos visibles con sus momios.
+Responde ÚNICAMENTE con JSON válido, sin texto adicional ni backticks:
+{
+  "partidos": [
+    {
+      "fecha": "DD/MM",
+      "hora": "HH:MM",
+      "local": "nombre equipo local",
+      "visita": "nombre equipo visitante",
+      "m_l": 2.75,
+      "m_e": 3.10,
+      "m_v": 2.75,
+      "linea_ou": 2.5,
+      "m_over": 2.20,
+      "m_under": 1.68,
+      "m_btts_si": 1.86,
+      "m_btts_no": 1.95
+    }
+  ]
+}
+Si no hay momios de Over/Under o BTTS visibles en la imagen, usa 0.
+Incluye todos los partidos aunque falten algunos momios."""
+                })
+
+                resp = requests.post(
+                    "https://api.anthropic.com/v1/messages",
+                    headers={"Content-Type": "application/json"},
+                    json={
+                        "model": "claude-sonnet-4-20250514",
+                        "max_tokens": 2000,
+                        "messages": [{"role": "user", "content": content}]
+                    },
+                    timeout=30,
+                )
+                data = resp.json()
+                text = "".join(b.get("text", "") for b in data.get("content", []))
+                clean = text.replace("```json", "").replace("```", "").strip()
+                parsed = json.loads(clean)
+
+                imported = 0
+                for p in parsed.get("partidos", []):
+                    local  = p.get("local", "").strip()
+                    visita = p.get("visita", "").strip()
+                    if not local or not visita:
+                        continue
+                    key = f"{local} vs {visita}"
+                    existing = get_momios(key)
+                    merged = {**existing, **{k: v for k, v in {
+                        "m_l":       p.get("m_l", 0),
+                        "m_e":       p.get("m_e", 0),
+                        "m_v":       p.get("m_v", 0),
+                        "linea_ou":  p.get("linea_ou", 2.5),
+                        "m_over":    p.get("m_over", 0),
+                        "m_under":   p.get("m_under", 0),
+                        "m_btts_si": p.get("m_btts_si", 0),
+                        "m_btts_no": p.get("m_btts_no", 0),
+                    }.items() if v and v > 0}}
+                    set_momios(key, merged)
+                    imported += 1
+
+                st.success(f"✓ {imported} partido(s) actualizados. Revisa y corrige abajo si hay errores.")
+                st.rerun()
+
+            except Exception as e:
+                st.error(f"Error: {e}")
+
+# ── Filtros ────────────────────────────────────────────────────────────────────
+st.markdown('<div class="sec-label">Filtrar partidos</div>', unsafe_allow_html=True)
+
+f1, f2 = st.columns(2)
+with f1:
+    ligas_disp = ["Todas las ligas"] + [
+        lg for lg in LEAGUE_NAMES
+        if st.session_state.get("fixtures_store", {}).get(lg)
+    ]
+    filtro_liga = st.selectbox("Liga", ligas_disp, key="momios_liga_filter")
+with f2:
+    filtro_fecha = st.selectbox(
+        "Período",
+        ["Jornada actual", "Próximos 3 días", "Próximos 7 días", "Todos"],
+        key="momios_fecha_filter",
+    )
+
+# ── Obtener partidos ───────────────────────────────────────────────────────────
+today = date.today()
+all_matches = get_all_pending_matches()
+
+# Aplicar filtros
+if filtro_liga != "Todas las ligas":
+    all_matches = [m for m in all_matches if m["league"] == filtro_liga]
+
+if filtro_fecha == "Jornada actual":
+    # Partidos de la jornada con fixtures cargados
+    from data.fixtures import get_current_gameweek, get_gameweek_matches
+    wk_matches_keys = set()
+    for lg in LEAGUE_NAMES:
+        from data.session import get_fixtures
+        df_fix = get_fixtures(lg)
+        if df_fix is None: continue
+        wk = get_current_gameweek(df_fix, today)
+        if wk is None: continue
+        gw = get_gameweek_matches(df_fix, wk, today)
+        for _, r in gw.iterrows():
+            wk_matches_keys.add(f"{r['home']} vs {r['away']}")
+    if wk_matches_keys:
+        all_matches = [m for m in all_matches if m["key"] in wk_matches_keys]
+elif filtro_fecha == "Próximos 3 días":
+    all_matches = [m for m in all_matches if m["date"] <= today + timedelta(days=3)]
+elif filtro_fecha == "Próximos 7 días":
+    all_matches = [m for m in all_matches if m["date"] <= today + timedelta(days=7)]
+
+if not all_matches:
+    st.info("Sin partidos con los filtros actuales. Carga fixtures en la página Datos primero.")
+    st.stop()
+
+st.caption(f"{len(all_matches)} partido(s)")
+
+# ── Tabla de momios ────────────────────────────────────────────────────────────
+st.markdown('<div class="sec-label">Momios por partido</div>', unsafe_allow_html=True)
+
+# Agrupar por liga
+from itertools import groupby
+all_matches.sort(key=lambda x: (LEAGUE_NAMES.index(x["league"]) if x["league"] in LEAGUE_NAMES else 99, x["date"], x["time"]))
+
+for league_name, group in groupby(all_matches, key=lambda x: x["league"]):
+    group_list = list(group)
+    cfg = LEAGUES.get(league_name, {})
+    flag = cfg.get("flag", "")
+
+    st.markdown(
+        f'<div style="display:flex;align-items:center;gap:8px;margin:16px 0 8px 0;'
+        f'padding-bottom:8px;border-bottom:1px solid #e7e5e0;">'
+        f'<span style="font-size:0.85rem;font-weight:600;color:#1c1917;">{flag} {league_name}</span>'
+        f'<span style="font-size:0.65rem;font-family:DM Mono,monospace;color:#a8a29e;">'
+        f'{len(group_list)} partidos</span></div>',
+        unsafe_allow_html=True,
+    )
+
+    for m in group_list:
+        key    = m["key"]
+        home   = m["home"]
+        away   = m["away"]
+        saved  = get_momios(key)
+        d_str  = f"{m['date'].strftime('%d/%m')} {m['time']}"
+
+        with st.expander(
+            f"{'🟢' if saved.get('m_l') else '⚪'} {d_str} · **{home}** vs {away}",
+            expanded=not bool(saved.get("m_l"))
+        ):
+            # 1X2
+            c1, c2, c3 = st.columns(3)
+            m_l = c1.number_input("Local",  value=float(saved.get("m_l", 0) or 0),
+                                  format="%.2f", min_value=0.0, key=f"ml_{key}")
+            m_e = c2.number_input("Empate", value=float(saved.get("m_e", 0) or 0),
+                                  format="%.2f", min_value=0.0, key=f"me_{key}")
+            m_v = c3.number_input("Visita", value=float(saved.get("m_v", 0) or 0),
+                                  format="%.2f", min_value=0.0, key=f"mv_{key}")
+
+            # Over/Under + BTTS
+            c4, c5, c6, c7, c8 = st.columns(5)
+            linea    = c4.selectbox("Línea", [1.5, 2.5, 3.5],
+                                    index=[1.5,2.5,3.5].index(saved.get("linea_ou", 2.5))
+                                    if saved.get("linea_ou") in [1.5,2.5,3.5] else 1,
+                                    key=f"ln_{key}")
+            m_over   = c5.number_input("Over",   value=float(saved.get("m_over",   0) or 0),
+                                        format="%.2f", min_value=0.0, key=f"mov_{key}")
+            m_under  = c6.number_input("Under",  value=float(saved.get("m_under",  0) or 0),
+                                        format="%.2f", min_value=0.0, key=f"mun_{key}")
+            m_bts    = c7.number_input("BTTS Sí",value=float(saved.get("m_btts_si",0) or 0),
+                                        format="%.2f", min_value=0.0, key=f"bts_{key}")
+            m_btn    = c8.number_input("BTTS No",value=float(saved.get("m_btts_no",0) or 0),
+                                        format="%.2f", min_value=0.0, key=f"btn_{key}")
+
+            if st.button("💾 Guardar", key=f"save_{key}", use_container_width=False):
+                set_momios(key, {
+                    "m_l": m_l, "m_e": m_e, "m_v": m_v,
+                    "linea_ou": linea, "m_over": m_over, "m_under": m_under,
+                    "m_btts_si": m_bts, "m_btts_no": m_btn,
+                })
+                st.rerun()
+
+# ── Guardar sesión ─────────────────────────────────────────────────────────────
+st.markdown('<div class="sec-label">Guardar</div>', unsafe_allow_html=True)
+st.download_button(
+    "⬇️ Exportar sesión con momios",
+    data=export_session(),
+    file_name=f"intelligence_pro_{date.today()}.json",
+    mime="application/json",
+    use_container_width=False,
+)

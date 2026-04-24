@@ -156,11 +156,26 @@ def vig_info(or_pct: float, m_l: float, m_e: float, m_v: float,
 
 def jornada_row(ap: dict) -> str:
     st_cls = {"GANADA": "j-gan", "PERDIDA": "j-per"}.get(ap["estado"], "j-pen")
+    prob   = ap.get("prob", None)
+    ev     = ap.get("ev",   None)
+    edge   = ap.get("edge", None)
+    prob_txt = f'<span style="font-size:0.65rem;color:#a8a29e;font-family:DM Mono,monospace;">{prob:.1f}% prob' if prob else ""
+    ev_txt   = ""
+    if ev is not None:
+        ev_color = "#16a34a" if ev > 0 else "#dc2626"
+        ev_txt = f'<span style="font-size:0.65rem;font-family:DM Mono,monospace;color:{ev_color};">{ev:+.1f}% EV</span>'
+    edge_txt = ""
+    if edge is not None:
+        eg_color = "#16a34a" if edge > 0 else "#dc2626"
+        edge_txt = f'<span style="font-size:0.65rem;font-family:DM Mono,monospace;color:{eg_color};">edge {edge:+.1f}%</span>'
+    info = " · ".join(filter(None, [prob_txt + ("</span>" if prob else ""), ev_txt, edge_txt]))
     return f"""
-    <div class="jrow">
-        <span class="j-match">{ap['partido']}</span>
-        <span class="j-mkt">{ap['pick']}</span>
-        <span class="j-momio">@{ap['momio']:.2f}</span>
-        <span class="j-stake">{fmt_money(ap['stake'])}</span>
-        <span class="{st_cls}">{ap['estado']}</span>
+    <div class="jrow" style="flex-wrap:wrap;gap:6px;">
+        <span class="j-match" style="flex:2;min-width:140px;">{ap['partido']}</span>
+        <span class="j-mkt" style="flex:1;">{ap['pick']}</span>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;">
+            <span><span class="j-momio">@{ap['momio']:.2f}</span> <span class="j-stake">{fmt_money(ap['stake'])}</span></span>
+            <span style="display:flex;gap:8px;">{info}</span>
+        </div>
+        <span class="{st_cls}" style="min-width:60px;text-align:right;">{ap['estado']}</span>
     </div>"""

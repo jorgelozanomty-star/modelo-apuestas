@@ -1,28 +1,9 @@
 """
-main.py
-Entry point de Intelligence Pro.
-Inicializa el estado, inyecta el CSS y orquesta las secciones.
-
-Estructura del proyecto:
-    main.py
-    requirements.txt
-    core/
-        poisson.py   ← modelo matemático (Poisson, todos los mercados)
-        kelly.py     ← criterio de Kelly y bankroll
-        value.py     ← EV, edge, eliminación de vig
-    data/
-        leagues.py   ← config por liga (5 ligas, home advantage, blend dinámico)
-        parser.py    ← parseo robusto de tablas FBRef
-        profile.py   ← construcción del perfil estadístico del equipo
-    ui/
-        styles.py    ← todo el CSS
-        components.py← componentes HTML reutilizables
-        sidebar.py   ← Data Hub + Bankroll
-        sections.py  ← secciones 01-06 de la app
+main.py - Intelligence Pro v3.0
+Navegacion de 3 paginas: Datos · Momios · Analisis
 """
 import streamlit as st
 
-# ── Page config (debe ir antes de cualquier otro st.* ) ──────────────────────
 st.set_page_config(
     page_title="Intelligence Pro",
     page_icon="◈",
@@ -30,63 +11,63 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ── Imports internos ─────────────────────────────────────────────────────────
-from ui.styles        import inject_css
-from ui.sidebar       import render_sidebar
-from ui.sections      import (
-    section_encuentro,
-    section_comparativa,
-    section_probabilidades,
-    section_picks,
-    section_jornada,
-    section_historial,
-)
-from ui.fixture_view  import render_fixtures_sidebar, render_jornada_view, render_h2h_card
+from data.session import init
+init()
 
-# ── Estado de sesión ──────────────────────────────────────────────────────────
-_DEFAULTS = {
-    "banca_actual":        1000.0,
-    "banca_inicial":       1000.0,
-    "jornada_pendientes":  [],
-    "historial":           [],
-    "data_master":         {},
-    "fixtures_df":         None,
-    "h2h_data":            None,
-    "selected_home":       None,
-    "selected_away":       None,
-}
-for key, val in _DEFAULTS.items():
-    if key not in st.session_state:
-        st.session_state[key] = val
+pg_datos    = st.Page("pages/datos.py",    title="① Datos",    icon="📂", default=True)
+pg_momios   = st.Page("pages/momios.py",   title="② Momios",   icon="💰")
+pg_analisis = st.Page("pages/analisis.py", title="③ Análisis", icon="🔬")
 
-# ── CSS ───────────────────────────────────────────────────────────────────────
-inject_css()
+nav = st.navigation([pg_datos, pg_momios, pg_analisis])
 
-# ── Sidebar ───────────────────────────────────────────────────────────────────
-cfg = render_sidebar()
-render_fixtures_sidebar()
+with st.sidebar:
+    st.markdown("### ◈ Intelligence Pro")
+    st.markdown(
+        '<p style="font-size:0.68rem;color:#a8a29e;font-family:DM Mono,monospace;margin-top:-6px;">'
+        'v3.0 · Datos · Momios · Análisis</p>',
+        unsafe_allow_html=True,
+    )
+    from ui.styles import inject_css
+    inject_css()
+    from ui.components import fmt_money
+    from core.kelly import roi_pct
+    r = roi_pct(st.session_state.banca_actual, st.session_state.banca_inicial)
+    roi_cls = "roi-pos" if r > 0 else ("roi-neg" if r < 0 else "roi-neu")
+    st.markdown(
+        f'<div class="banca-box">'
+        f'<div class="banca-lbl">Banca Actual</div>'
+        f'<div class="banca-val">{fmt_money(st.session_state.banca_actual)}</div>'
+        f'<div class="banca-roi {roi_cls}">ROI: {r:+.2f}%</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown("---")
+    from datetime import date
+    from data.session import export_session, import_session
+    st.markdown(
+        '<p style="font-size:0.62rem;font-weight:600;color:#44403c;text-transform:uppercase;letter-spacing:0.10em;">Sesión</p>',
+        unsafe_allow_html=True,
+    )
+    st.download_button(
+        "⬇️ Exportar sesión",
+        data=export_session(),
+        file_name=f"intelligence_pro_{date.today()}.json",
+        mime="application/json",
+        use_container_width=True,
+    )
+    uploaded = st.file_uploader(
+        "⬆️ Cargar sesión", type="json",
+        label_visibility="collapsed", key="main_upload",
+    )
+    if uploaded:
+        fid = f"{uploaded.name}_{uploaded.size}"
+        if st.session_state.get("_main_import") != fid:
+            ok, msg = import_session(uploaded.read())
+            st.session_state["_main_import"] = fid
+            if ok:
+                st.success(msg)
+                st.rerun()
+            else:
+                st.error(msg)
 
-# ── Header ────────────────────────────────────────────────────────────────────
-st.markdown(
-    f"""<div class="app-header">
-        <span class="app-title">◈ Intelligence Pro</span>
-        <span class="app-sub">Poisson · Kelly · xG Blend · 5 Ligas</span>
-        <span class="app-tag">{cfg['tables_loaded']}/9 tablas · {cfg['league']}</span>
-    </div>""",
-    unsafe_allow_html=True,
-)
-
-# ── Secciones principales ────────────────────────────────────────────────────
-# Vista de jornada (si hay fixtures cargados)
-render_jornada_view()
-
-ctx = section_encuentro(cfg)
-
-if ctx:
-    render_h2h_card(home=ctx.get('local',''), away=ctx.get('visita',''))
-    section_comparativa(ctx)
-    section_probabilidades(ctx)
-    section_picks(ctx, cfg)
-
-section_jornada()
-section_historial()
+nav.run()
