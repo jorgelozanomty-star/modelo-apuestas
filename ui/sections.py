@@ -35,11 +35,17 @@ def section_encuentro(cfg: dict) -> dict:
 
     equipos = [_NONE] + get_squad_list(st.session_state.data_master)
 
+    # Pre-seleccionar si viene de click en fixture
+    pre_home  = st.session_state.pop('selected_home', None)
+    pre_away  = st.session_state.pop('selected_away', None)
+    idx_home  = equipos.index(pre_home)  if pre_home  in equipos else 0
+    idx_away  = equipos.index(pre_away)  if pre_away  in equipos else 0
+
     # Selectores de equipo
     c_l, c_vs, c_v = st.columns([5, 1, 5])
     with c_l:
-        local = st.selectbox("Local", equipos, key="local_sel",
-                             label_visibility="collapsed")
+        local = st.selectbox("Local", equipos, index=idx_home,
+                             key="local_sel", label_visibility="collapsed")
     with c_vs:
         st.markdown(
             "<div style='text-align:center;font-size:0.72rem;"
@@ -47,8 +53,8 @@ def section_encuentro(cfg: dict) -> dict:
             unsafe_allow_html=True,
         )
     with c_v:
-        visita = st.selectbox("Visita", equipos, key="visita_sel",
-                              label_visibility="collapsed")
+        visita = st.selectbox("Visita", equipos, index=idx_away,
+                              key="visita_sel", label_visibility="collapsed")
 
     lname = local[:14]  if local  != _NONE else "Local"
     vname = visita[:14] if visita != _NONE else "Visita"

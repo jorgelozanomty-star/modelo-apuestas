@@ -31,9 +31,9 @@ st.set_page_config(
 )
 
 # ── Imports internos ─────────────────────────────────────────────────────────
-from ui.styles   import inject_css
-from ui.sidebar  import render_sidebar
-from ui.sections import (
+from ui.styles        import inject_css
+from ui.sidebar       import render_sidebar
+from ui.sections      import (
     section_encuentro,
     section_comparativa,
     section_probabilidades,
@@ -41,6 +41,7 @@ from ui.sections import (
     section_jornada,
     section_historial,
 )
+from ui.fixture_view  import render_fixtures_sidebar, render_jornada_view, render_h2h_card
 
 # ── Estado de sesión ──────────────────────────────────────────────────────────
 _DEFAULTS = {
@@ -49,6 +50,10 @@ _DEFAULTS = {
     "jornada_pendientes":  [],
     "historial":           [],
     "data_master":         {},
+    "fixtures_df":         None,
+    "h2h_data":            None,
+    "selected_home":       None,
+    "selected_away":       None,
 }
 for key, val in _DEFAULTS.items():
     if key not in st.session_state:
@@ -59,6 +64,7 @@ inject_css()
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 cfg = render_sidebar()
+render_fixtures_sidebar()
 
 # ── Header ────────────────────────────────────────────────────────────────────
 st.markdown(
@@ -71,9 +77,13 @@ st.markdown(
 )
 
 # ── Secciones principales ────────────────────────────────────────────────────
+# Vista de jornada (si hay fixtures cargados)
+render_jornada_view()
+
 ctx = section_encuentro(cfg)
 
 if ctx:
+    render_h2h_card()
     section_comparativa(ctx)
     section_probabilidades(ctx)
     section_picks(ctx, cfg)
