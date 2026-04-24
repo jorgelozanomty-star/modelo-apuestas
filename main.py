@@ -83,7 +83,7 @@ render_jornada_view()
 ctx = section_encuentro(cfg)
 
 if ctx:
-    render_h2h_card()
+    render_h2h_card(ctx.get('local',''), ctx.get('visita',''))
     section_comparativa(ctx)
     section_probabilidades(ctx)
     section_picks(ctx, cfg)

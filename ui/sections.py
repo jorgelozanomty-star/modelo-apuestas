@@ -36,10 +36,22 @@ def section_encuentro(cfg: dict) -> dict:
     equipos = [_NONE] + get_squad_list(st.session_state.data_master)
 
     # Pre-seleccionar si viene de click en fixture
-    pre_home  = st.session_state.pop('selected_home', None)
-    pre_away  = st.session_state.pop('selected_away', None)
-    idx_home  = equipos.index(pre_home)  if pre_home  in equipos else 0
-    idx_away  = equipos.index(pre_away)  if pre_away  in equipos else 0
+    # IMPORTANTE: borrar las keys del selectbox para forzar el nuevo index
+    pre_home = st.session_state.pop('selected_home', None)
+    pre_away = st.session_state.pop('selected_away', None)
+    if pre_home is not None:
+        # Forzar nuevos valores borrando el estado previo de los selectbox
+        for k in ['local_sel', 'visita_sel']:
+            if k in st.session_state:
+                del st.session_state[k]
+        st.session_state['_pre_home'] = pre_home
+        st.session_state['_pre_away'] = pre_away
+
+    # Leer pre-selección guardada
+    saved_home = st.session_state.get('_pre_home', None)
+    saved_away = st.session_state.get('_pre_away', None)
+    idx_home = equipos.index(saved_home) if saved_home in equipos else 0
+    idx_away = equipos.index(saved_away) if saved_away in equipos else 0
 
     # Selectores de equipo
     c_l, c_vs, c_v = st.columns([5, 1, 5])
