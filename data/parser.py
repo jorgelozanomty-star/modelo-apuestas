@@ -7,8 +7,17 @@ import pandas as pd
 
 # ── Normalización de nombres de equipos ──────────────────────────────────────
 EQUIPOS_MAP: dict = {
-    # Liga MX
+    # Liga MX — fixture names
     "UANL": "Tigres", "Tigres UANL": "Tigres",
+    "Tigres": "Tigres", "UANL Mazatlán": "Mazatlán",
+    "Guadalajara Chivas": "Chivas", "Guadalajara": "Chivas",
+    "Xolos de Tijuana": "Xolos", "Club Tijuana": "Xolos",
+    "Deportivo Toluca": "Toluca", "Club Leon": "León", "Club León": "León",
+    "Juarez Atletico": "Juárez", "FC Juárez": "Juárez", "Juarez": "Juárez",
+    "Atletico San Luis": "San Luis", "Atlético San Luis": "San Luis",
+    "Pumas UNAM": "Pumas", "America": "América", "CA América": "América",
+    "CF Monterrey": "Rayados", "CF Monterrey": "Rayados",
+    "Deportivo Toluca FC": "Toluca",
     "Club América": "América", "CA América": "América",
     "Guadalajara": "Chivas", "CD Guadalajara": "Chivas",
     "Cruz Azul": "Cruz Azul",

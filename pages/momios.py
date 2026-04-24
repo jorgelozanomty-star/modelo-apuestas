@@ -48,13 +48,32 @@ with st.expander("📋 Cargar momios desde JSON (generado por Claude en el chat)
             parsed = json.loads(clean)
             imported = 0
             skipped  = []
+            # Obtener todas las claves de fixtures para fuzzy matching
+            all_fixture_keys = list(st.session_state.get("momios_store", {}).keys())
+            # También obtener claves de todos los partidos pendientes
+            from data.session import get_all_pending_matches
+            pending = get_all_pending_matches()
+            fixture_keys_map = {m["key"].lower(): m["key"] for m in pending}
+
             for p in parsed.get("partidos", []):
                 local_  = str(p.get("local",  "")).strip()
                 visita_ = str(p.get("visita", "")).strip()
                 if not local_ or not visita_:
                     continue
+
+                # Intentar coincidencia exacta primero
                 key_ = f"{local_} vs {visita_}"
-                existing = get_momios(key_)
+                # Luego fuzzy: buscar fixture que contenga ambos nombres
+                best_key = key_
+                if key_.lower() not in fixture_keys_map:
+                    for fk_lower, fk_real in fixture_keys_map.items():
+                        home_fk = fk_lower.split(" vs ")[0] if " vs " in fk_lower else ""
+                        away_fk = fk_lower.split(" vs ")[1] if " vs " in fk_lower else ""
+                        if (local_.lower() in home_fk or home_fk in local_.lower()) and                            (visita_.lower() in away_fk or away_fk in visita_.lower()):
+                            best_key = fk_real
+                            break
+
+                existing = get_momios(best_key)
                 new_vals = {k: v for k, v in {
                     "m_l":       p.get("m_l",       0),
                     "m_e":       p.get("m_e",       0),
@@ -65,7 +84,7 @@ with st.expander("📋 Cargar momios desde JSON (generado por Claude en el chat)
                     "m_btts_si": p.get("m_btts_si", 0),
                     "m_btts_no": p.get("m_btts_no", 0),
                 }.items() if v and v > 0}
-                set_momios(key_, {**existing, **new_vals})
+                set_momios(best_key, {**existing, **new_vals})
                 imported += 1
             if imported:
                 st.success(f"✓ {imported} partido(s) cargados. Revisa y ajusta abajo.")

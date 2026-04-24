@@ -24,18 +24,55 @@ _VENUE_WORDS = {
     'Emirates','Anfield','Stamford','Etihad','Molineux','Craven','Elland',
     'Vitality','Selhurst','Goodison','Turf','American','Head-to-Head','Match',
     'Report','Head',
+    # Venues españoles / Liga MX
+    'Estadio','Azteca','Universitario','Hidalgo','Cuauhtémoc','Jalisco',
+    'Akron','BBVA','Nemesio','TSM','Caliente','Olímpico','Victoria',
+    'Corregidora','Kraken','Encanto',
+}
+
+# Nombres completos de equipos conocidos para mejor split
+_KNOWN_TEAMS = set(EQUIPOS_MAP.keys()) | set(EQUIPOS_MAP.values()) | {
+    # Liga MX nombres completos
+    'Puebla', 'Querétaro', 'Necaxa', 'Toluca', 'Pachuca', 'Atlas',
+    'Santos Laguna', 'Cruz Azul', 'América', 'Pumas', 'Tigres', 'Rayados',
+    'Chivas', 'Xolos', 'Juárez', 'Mazatlán', 'San Luis', 'León',
+    # Premier League
+    'Sunderland', 'Fulham', 'Liverpool', 'Arsenal', 'Chelsea', 'Everton',
+    'Brentford', 'Brighton', 'Bournemouth', 'Newcastle United',
+    'Nottingham Forest', 'Manchester United', 'Manchester City',
+    'Crystal Palace', 'Aston Villa', 'West Ham United',
+    'Wolverhampton Wanderers', 'Tottenham Hotspur', 'Leeds United',
 }
 
 def _split_home_away(tokens):
+    # Limpiar venue words del final
     clean = []
     for t in tokens:
         if t in _VENUE_WORDS: break
         if t.replace(',','').isdigit() and len(t.replace(',','')) > 3: break
         clean.append(t)
     if len(clean) < 2: return '', ''
+
+    # Intentar todos los splits — preferir splits donde ambas partes son equipos conocidos
+    best = None
+    for mid in range(1, len(clean)):
+        h = ' '.join(clean[:mid])
+        a = ' '.join(clean[mid:])
+        h_norm = _norm(h); a_norm = _norm(a)
+        h_known = h_norm in _KNOWN_TEAMS or h in _KNOWN_TEAMS or clean[mid-1] in _TEAM_ENDS
+        a_known = a_norm in _KNOWN_TEAMS or a in _KNOWN_TEAMS or clean[-1] in _TEAM_ENDS
+        if h_known and a_known:
+            if best is None:
+                best = (h_norm, a_norm)
+    if best:
+        return best
+
+    # Fallback: último token en TEAM_ENDS
     for mid in range(1, len(clean)):
         if clean[mid-1] in _TEAM_ENDS and clean[-1] in _TEAM_ENDS:
             return _norm(' '.join(clean[:mid])), _norm(' '.join(clean[mid:]))
+
+    # Último fallback: mitad
     mid = len(clean) // 2
     return _norm(' '.join(clean[:mid])), _norm(' '.join(clean[mid:]))
 
