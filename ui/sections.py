@@ -263,8 +263,48 @@ def section_jornada():
         f"Exposición total: {fmt_money(total_exp)}"
     )
 
-    for ap in st.session_state.jornada_pendientes:
-        st.markdown(jornada_row(ap), unsafe_allow_html=True)
+    # Inicializar estado de edición
+    if "edit_idx" not in st.session_state:
+        st.session_state.edit_idx = None
+
+    # Filas de jornada con botón eliminar
+    for i, ap in enumerate(st.session_state.jornada_pendientes):
+        col_row, col_del = st.columns([11, 1])
+        with col_row:
+            # Click en el partido abre editor
+            st.markdown(jornada_row(ap), unsafe_allow_html=True)
+        with col_del:
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("🗑️", key=f"del_{i}", help="Eliminar apuesta"):
+                st.session_state.jornada_pendientes.pop(i)
+                if st.session_state.edit_idx == i:
+                    st.session_state.edit_idx = None
+                st.rerun()
+
+    # Editor inline — se activa al hacer click en Editar
+    with st.expander("✏️ Editar apuesta"):
+        if st.session_state.jornada_pendientes:
+            edit_idx = st.selectbox(
+                "Seleccionar apuesta",
+                range(len(st.session_state.jornada_pendientes)),
+                format_func=lambda i: f"{st.session_state.jornada_pendientes[i]['partido']} — {st.session_state.jornada_pendientes[i]['pick']}",
+                key="edit_sel",
+            )
+            ap = st.session_state.jornada_pendientes[edit_idx]
+            ec1, ec2, ec3 = st.columns(3)
+            with ec1:
+                new_pick = st.text_input("Pick", value=ap["pick"], key="edit_pick")
+            with ec2:
+                new_momio = st.number_input("Momio", value=float(ap["momio"]),
+                                            format="%.2f", min_value=1.01, key="edit_momio")
+            with ec3:
+                new_stake = st.number_input("Stake $", value=float(ap["stake"]),
+                                            format="%.2f", min_value=0.01, key="edit_stake")
+            if st.button("💾 Guardar cambios", use_container_width=True):
+                st.session_state.jornada_pendientes[edit_idx]["pick"]  = new_pick
+                st.session_state.jornada_pendientes[edit_idx]["momio"] = new_momio
+                st.session_state.jornada_pendientes[edit_idx]["stake"] = new_stake
+                st.rerun()
 
     with st.expander("💰 Registrar resultado"):
         idx = st.selectbox(
