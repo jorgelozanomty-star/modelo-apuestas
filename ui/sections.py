@@ -47,9 +47,9 @@ def section_encuentro(cfg: dict) -> dict:
         st.session_state['_pre_home'] = pre_home
         st.session_state['_pre_away'] = pre_away
 
-    # Leer pre-selección guardada
-    saved_home = st.session_state.get('_pre_home', None)
-    saved_away = st.session_state.get('_pre_away', None)
+    # Leer pre-selección guardada y limpiarla para no persistir
+    saved_home = st.session_state.pop('_pre_home', None)
+    saved_away = st.session_state.pop('_pre_away', None)
     idx_home = equipos.index(saved_home) if saved_home in equipos else 0
     idx_away = equipos.index(saved_away) if saved_away in equipos else 0
 
@@ -229,21 +229,34 @@ def section_picks(ctx: dict, cfg: dict):
     # Cards 1X2
     st.markdown(picks_row(picks), unsafe_allow_html=True)
 
-    # Over/Under con momios — picks guardados en session_state para poder agregarlos
+    # Over/Under con momios
     ou_picks = []
     with st.expander("➕ Analizar Over / Under"):
         ou_cols = st.columns(3)
-        with ou_cols[0]: ou_line  = st.selectbox("Línea", [1.5, 2.5, 3.5], index=1, key="ou_line")
-        with ou_cols[1]: m_over   = st.number_input("Momio Over",  value=1.90, format="%.2f", min_value=1.01, key="m_over")
-        with ou_cols[2]: m_under  = st.number_input("Momio Under", value=1.90, format="%.2f", min_value=1.01, key="m_under")
+        with ou_cols[0]: ou_line = st.selectbox("Línea", [1.5, 2.5, 3.5], index=1, key="ou_line")
+        with ou_cols[1]: m_over  = st.number_input("Momio Over",  value=1.90, format="%.2f", min_value=1.01, key="m_over")
+        with ou_cols[2]: m_under = st.number_input("Momio Under", value=1.90, format="%.2f", min_value=1.01, key="m_under")
         ou_picks = evaluate_ou(
             markets, ou_line, m_over, m_under,
             cfg["kelly_fraction"], st.session_state.banca_actual,
         )
         st.markdown(picks_row(ou_picks), unsafe_allow_html=True)
 
-    # Todos los picks disponibles (1X2 + OU)
-    all_picks = picks + ou_picks
+    # BTTS con momios
+    btts_picks = []
+    with st.expander("🎯 Analizar BTTS"):
+        bc1, bc2 = st.columns(2)
+        with bc1: m_btts_si = st.number_input("Momio Sí anotan", value=1.80, format="%.2f", min_value=1.01, key="m_btts_si")
+        with bc2: m_btts_no = st.number_input("Momio No anotan", value=1.95, format="%.2f", min_value=1.01, key="m_btts_no")
+        from core.value import evaluate_pick
+        btts_picks = [
+            evaluate_pick("BTTS Sí", markets["btts"],    m_btts_si, cfg["kelly_fraction"], st.session_state.banca_actual),
+            evaluate_pick("BTTS No", markets["no_btts"], m_btts_no, cfg["kelly_fraction"], st.session_state.banca_actual),
+        ]
+        st.markdown(picks_row(btts_picks), unsafe_allow_html=True)
+
+    # Todos los picks disponibles (1X2 + OU + BTTS)
+    all_picks = picks + ou_picks + btts_picks
     st.markdown('<div style="margin-top:8px;"></div>', unsafe_allow_html=True)
     all_picks_labels = [f"{p['name']} (EV: {p['ev']:+.1f}%)" for p in all_picks]
     pa1, pa2 = st.columns([3, 1])
