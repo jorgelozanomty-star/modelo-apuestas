@@ -100,6 +100,50 @@ def render_sidebar() -> dict:
 
         st.markdown("---")
 
+        # ── Guardar / Cargar sesión ───────────────────────────────────────────
+        st.markdown(
+            '<p style="font-size:0.62rem;font-weight:600;color:#44403c;'            'text-transform:uppercase;letter-spacing:0.10em;">Sesión</p>',
+            unsafe_allow_html=True,
+        )
+
+        # Exportar
+        import json, datetime
+        session_data = {
+            "version":            "2.0",
+            "exported_at":        datetime.datetime.now().isoformat(),
+            "banca_actual":       st.session_state.banca_actual,
+            "banca_inicial":      st.session_state.banca_inicial,
+            "jornada_pendientes": st.session_state.jornada_pendientes,
+            "historial":          st.session_state.historial,
+        }
+        st.download_button(
+            label="⬇️ Exportar sesión",
+            data=json.dumps(session_data, ensure_ascii=False, indent=2),
+            file_name=f"intelligence_pro_{datetime.date.today()}.json",
+            mime="application/json",
+            use_container_width=True,
+        )
+
+        # Importar
+        uploaded = st.file_uploader(
+            "⬆️ Cargar sesión", type="json",
+            label_visibility="collapsed",
+            key="session_upload",
+        )
+        if uploaded is not None:
+            try:
+                data = json.load(uploaded)
+                st.session_state.banca_actual       = float(data.get("banca_actual",       1000.0))
+                st.session_state.banca_inicial      = float(data.get("banca_inicial",      1000.0))
+                st.session_state.jornada_pendientes = data.get("jornada_pendientes", [])
+                st.session_state.historial          = data.get("historial",          [])
+                st.success("✓ Sesión restaurada")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error al cargar: {e}")
+
+        st.markdown("---")
+
         # ── Data Hub ──────────────────────────────────────────────────────────
         st.markdown(
             '<p style="font-size:0.62rem;font-weight:600;color:#44403c;'
