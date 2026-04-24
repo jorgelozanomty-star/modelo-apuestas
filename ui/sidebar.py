@@ -87,11 +87,19 @@ def render_sidebar() -> dict:
             'Liga</p>',
             unsafe_allow_html=True,
         )
+        # Guardar liga anterior para detectar cambio
+        prev_league = st.session_state.get("_prev_league", None)
         league = st.selectbox(
             "Liga", LEAGUE_NAMES,
             label_visibility="collapsed",
             key="league_sel",
         )
+        # Si cambió la liga, limpiar tablas FBRef
+        if prev_league is not None and league != prev_league:
+            st.session_state.data_master = {}
+            st.session_state["_prev_league"] = league
+            st.rerun()
+        st.session_state["_prev_league"] = league
 
         # ── Limpiar jornada ───────────────────────────────────────────────────
         if st.button("🗑️ Limpiar jornada", use_container_width=True):
@@ -124,23 +132,26 @@ def render_sidebar() -> dict:
             use_container_width=True,
         )
 
-        # Importar
+        # Importar — usamos el nombre del archivo como flag para no re-importar en cada rerun
         uploaded = st.file_uploader(
             "⬆️ Cargar sesión", type="json",
             label_visibility="collapsed",
             key="session_upload",
         )
         if uploaded is not None:
-            try:
-                data = json.load(uploaded)
-                st.session_state.banca_actual       = float(data.get("banca_actual",       1000.0))
-                st.session_state.banca_inicial      = float(data.get("banca_inicial",      1000.0))
-                st.session_state.jornada_pendientes = data.get("jornada_pendientes", [])
-                st.session_state.historial          = data.get("historial",          [])
-                st.success("✓ Sesión restaurada")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Error al cargar: {e}")
+            file_id = f"{uploaded.name}_{uploaded.size}"
+            if st.session_state.get("_last_imported") != file_id:
+                try:
+                    data = json.load(uploaded)
+                    st.session_state.banca_actual       = float(data.get("banca_actual",       1000.0))
+                    st.session_state.banca_inicial      = float(data.get("banca_inicial",      1000.0))
+                    st.session_state.jornada_pendientes = data.get("jornada_pendientes", [])
+                    st.session_state.historial          = data.get("historial",          [])
+                    st.session_state["_last_imported"]  = file_id
+                    st.success(f"✓ Sesión restaurada — {len(st.session_state.jornada_pendientes)} apuesta(s) · {len(st.session_state.historial)} en historial")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error al cargar: {e}")
 
         st.markdown("---")
 
