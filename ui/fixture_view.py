@@ -70,6 +70,9 @@ def render_fixtures_sidebar():
 
         # ── H2H ──────────────────────────────────────────────────────────────
         with st.expander("⚔️ Head to Head"):
+            match_key = st.session_state.get('h2h_match_key', '')
+            if match_key:
+                st.caption(f"Para: {match_key.replace('_', ' vs ')}")
             raw_h2h = st.text_area(
                 "", key="in_h2h", height=70,
                 label_visibility="collapsed",
@@ -78,6 +81,11 @@ def render_fixtures_sidebar():
             if raw_h2h:
                 h2h_data = parse_h2h(raw_h2h)
                 if h2h_data:
+                    # Guardar H2H por partido
+                    if 'h2h_store' not in st.session_state:
+                        st.session_state.h2h_store = {}
+                    key = match_key or 'general'
+                    st.session_state.h2h_store[key] = h2h_data
                     st.session_state.h2h_data = h2h_data
                     st.markdown(
                         f'<div class="tbl-loaded">✓ {h2h_data["total_matches"]} partidos H2H</div>',
@@ -162,7 +170,7 @@ def render_jornada_view() -> dict | None:
         home_ok = "🟢" if home in squads_available else "⚪"
         away_ok = "🟢" if away in squads_available else "⚪"
 
-        score_txt = f"**{score}**" if score else _format_date(d)
+        score_txt = f"<b>{score}</b>" if (score and str(score) != 'nan') else _format_date(d)
 
         col_match, col_btn = st.columns([5, 1])
         with col_match:
@@ -188,17 +196,29 @@ def render_jornada_view() -> dict | None:
         # Guardar en session_state para que section_encuentro los precargue
         st.session_state['selected_home'] = selected_match['home']
         st.session_state['selected_away'] = selected_match['away']
+        # Limpiar H2H del partido anterior
+        st.session_state['h2h_data'] = None
+        st.session_state['h2h_match_key'] = f"{selected_match['home']}_{selected_match['away']}"
         st.rerun()
 
     return None
 
 
-def render_h2h_card():
+def render_h2h_card(home: str = '', away: str = ''):
     """
-    Muestra la card de H2H si hay datos cargados.
-    Se llama desde section_encuentro cuando hay H2H disponible.
+    Muestra la card de H2H si hay datos para el partido actual.
+    Busca primero en h2h_store por el par home_away, luego usa h2h_data.
     """
-    h2h = st.session_state.get('h2h_data', None)
+    h2h = None
+    # Buscar H2H específico del partido actual
+    if home and away:
+        store = st.session_state.get('h2h_store', {})
+        key1 = f"{home}_{away}"
+        key2 = f"{away}_{home}"
+        h2h = store.get(key1) or store.get(key2)
+    # Fallback al H2H global cargado
+    if not h2h:
+        h2h = st.session_state.get('h2h_data', None)
     if not h2h:
         return
 
