@@ -5,9 +5,7 @@ Tabla editable con todos los partidos de todas las ligas.
 Incluye lector de momios con Claude Vision.
 """
 import streamlit as st
-import base64
 import json
-import requests
 from datetime import date, timedelta
 
 from data.session   import init, get_all_pending_matches, set_momios, get_momios, export_session
@@ -26,94 +24,58 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ── Lector Claude Vision ───────────────────────────────────────────────────────
-with st.expander("📸 Lector automático — sube screenshots de Team Mexico"):
-    st.caption("Sube uno o varios screenshots (1X2 + Over/Under, y BTTS por separado). Claude extrae los momios automáticamente.")
-
-    uploaded_imgs = st.file_uploader(
-        "Screenshots", type=["png", "jpg", "jpeg"],
-        accept_multiple_files=True, label_visibility="collapsed",
-        key="momios_imgs",
+with st.expander("📋 Cargar momios desde JSON (generado por Claude en el chat)"):
+    st.caption(
+        "Manda los screenshots de Team Mexico a Claude en el chat → "
+        "Claude te entrega el JSON → pégalo aquí."
     )
-
-    if uploaded_imgs and st.button("🔍 Extraer momios con Claude", type="primary"):
-        with st.spinner("Claude está leyendo los momios…"):
-            try:
-                content = []
-                for img in uploaded_imgs:
-                    b64 = base64.b64encode(img.read()).decode()
-                    mime = img.type
-                    content.append({
-                        "type": "image",
-                        "source": {"type": "base64", "media_type": mime, "data": b64}
-                    })
-                content.append({
-                    "type": "text",
-                    "text": """Analiza estas imágenes de una casa de apuestas deportivas.
-Extrae TODOS los partidos visibles con sus momios.
-Responde ÚNICAMENTE con JSON válido, sin texto adicional ni backticks:
-{
-  "partidos": [
-    {
-      "fecha": "DD/MM",
-      "hora": "HH:MM",
-      "local": "nombre equipo local",
-      "visita": "nombre equipo visitante",
-      "m_l": 2.75,
-      "m_e": 3.10,
-      "m_v": 2.75,
-      "linea_ou": 2.5,
-      "m_over": 2.20,
-      "m_under": 1.68,
-      "m_btts_si": 1.86,
-      "m_btts_no": 1.95
-    }
-  ]
-}
-Si no hay momios de Over/Under o BTTS visibles en la imagen, usa 0.
-Incluye todos los partidos aunque falten algunos momios."""
-                })
-
-                resp = requests.post(
-                    "https://api.anthropic.com/v1/messages",
-                    headers={"Content-Type": "application/json"},
-                    json={
-                        "model": "claude-sonnet-4-20250514",
-                        "max_tokens": 2000,
-                        "messages": [{"role": "user", "content": content}]
-                    },
-                    timeout=30,
-                )
-                data = resp.json()
-                text = "".join(b.get("text", "") for b in data.get("content", []))
-                clean = text.replace("```json", "").replace("```", "").strip()
-                parsed = json.loads(clean)
-
-                imported = 0
-                for p in parsed.get("partidos", []):
-                    local  = p.get("local", "").strip()
-                    visita = p.get("visita", "").strip()
-                    if not local or not visita:
-                        continue
-                    key = f"{local} vs {visita}"
-                    existing = get_momios(key)
-                    merged = {**existing, **{k: v for k, v in {
-                        "m_l":       p.get("m_l", 0),
-                        "m_e":       p.get("m_e", 0),
-                        "m_v":       p.get("m_v", 0),
-                        "linea_ou":  p.get("linea_ou", 2.5),
-                        "m_over":    p.get("m_over", 0),
-                        "m_under":   p.get("m_under", 0),
-                        "m_btts_si": p.get("m_btts_si", 0),
-                        "m_btts_no": p.get("m_btts_no", 0),
-                    }.items() if v and v > 0}}
-                    set_momios(key, merged)
-                    imported += 1
-
-                st.success(f"✓ {imported} partido(s) actualizados. Revisa y corrige abajo si hay errores.")
+    st.markdown(
+        '<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;'
+        'padding:10px 14px;font-size:0.78rem;color:#92400e;margin-bottom:8px;">'
+        '💡 <b>¿Cómo?</b> Pega tus screenshots en esta misma conversación de Claude → '
+        'te devuelve el JSON listo → cópialo y pégalo aquí abajo.'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+    raw_json = st.text_area(
+        "", key="momios_json_paste", height=120,
+        label_visibility="collapsed",
+        placeholder='{ "partidos": [ { "local": "Sunderland", "visita": "Nottingham Forest", "m_l": 2.75, ... } ] }',
+    )
+    if raw_json and st.button("📥 Cargar momios", type="primary", key="load_json_btn"):
+        try:
+            clean = raw_json.replace("```json","").replace("```","").strip()
+            parsed = json.loads(clean)
+            imported = 0
+            skipped  = []
+            for p in parsed.get("partidos", []):
+                local_  = str(p.get("local",  "")).strip()
+                visita_ = str(p.get("visita", "")).strip()
+                if not local_ or not visita_:
+                    continue
+                key_ = f"{local_} vs {visita_}"
+                existing = get_momios(key_)
+                new_vals = {k: v for k, v in {
+                    "m_l":       p.get("m_l",       0),
+                    "m_e":       p.get("m_e",       0),
+                    "m_v":       p.get("m_v",       0),
+                    "linea_ou":  p.get("linea_ou",  2.5),
+                    "m_over":    p.get("m_over",    0),
+                    "m_under":   p.get("m_under",   0),
+                    "m_btts_si": p.get("m_btts_si", 0),
+                    "m_btts_no": p.get("m_btts_no", 0),
+                }.items() if v and v > 0}
+                set_momios(key_, {**existing, **new_vals})
+                imported += 1
+            if imported:
+                st.success(f"✓ {imported} partido(s) cargados. Revisa y ajusta abajo.")
                 st.rerun()
-
-            except Exception as e:
-                st.error(f"Error: {e}")
+            else:
+                st.warning("No se encontraron partidos válidos en el JSON.")
+        except json.JSONDecodeError as e:
+            st.error(f"JSON inválido: {e}")
+        except Exception as e:
+            st.error(f"Error: {e}")
 
 # ── Filtros ────────────────────────────────────────────────────────────────────
 st.markdown('<div class="sec-label">Filtrar partidos</div>', unsafe_allow_html=True)
