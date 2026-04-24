@@ -1,3 +1,4 @@
-streamlit>=1.32.0
+streamlit>=1.36.0
 pandas>=2.0.0
-# updated
+easysoccerdata>=0.0.8
+requests>=2.28.0
