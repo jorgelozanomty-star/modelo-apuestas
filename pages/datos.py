@@ -8,10 +8,13 @@ import streamlit as st
 import pandas as pd
 from datetime import date
 
-from data.session import init, get_data_master, set_table, set_fixtures, get_fixtures, export_session, import_session
-from data.parser  import process_fbref_paste
-from data.fixtures import parse_fixtures
-from data.leagues import LEAGUES, LEAGUE_NAMES
+from data.session   import init, get_data_master, set_table, set_fixtures, get_fixtures, export_session, import_session
+from data.parser    import process_fbref_paste
+from data.fixtures  import parse_fixtures
+from data.leagues   import LEAGUES, LEAGUE_NAMES
+from data.sofascore import (load_standings, load_fixtures, load_team_stats,
+                             _sofascore_available, get_season_ids_hint,
+                             SOFASCORE_TOURNAMENTS)
 from ui.styles import inject_css
 
 init()
@@ -52,6 +55,67 @@ st.caption(
     f"{cfg['flag']} Home advantage: +{cfg['home_adv']:.2f} goles  ·  "
     f"Blend dinámico activo desde jornada {cfg['blend_jornada_threshold']}"
 )
+
+# ── Carga automática desde Sofascore ──────────────────────────────────────────
+st.markdown('<div class="sec-label">Carga automática (Sofascore)</div>', unsafe_allow_html=True)
+
+esd_ok = _sofascore_available()
+league_in_ss = league in SOFASCORE_TOURNAMENTS
+
+if not esd_ok:
+    st.warning(
+        "**EasySoccerData no está instalado.** "
+        "Agrega `EasySoccerData` a tu `requirements.txt` y reinicia la app."
+    )
+elif not league_in_ss:
+    st.info(f"{league} no tiene ID de Sofascore configurado todavía.")
+else:
+    ss_cfg = SOFASCORE_TOURNAMENTS[league]
+    st.caption(
+        f"Tournament ID: `{ss_cfg['tournament_id']}` · "
+        f"Season ID: `{ss_cfg['season_id']}` — actualiza en `data/sofascore.py` si cambia la temporada"
+    )
+
+    col_ss1, col_ss2, col_ss3 = st.columns(3)
+
+    with col_ss1:
+        if st.button("📥 Tabla de posiciones", use_container_width=True, key="ss_standings"):
+            with st.spinner("Cargando desde Sofascore…"):
+                df_st = load_standings(league)
+            if df_st is not None and len(df_st) > 0:
+                set_table(league, "Tabla General", df_st)
+                st.success(f"✓ {len(df_st)} equipos cargados")
+                st.rerun()
+            else:
+                st.error("Error al cargar. Verifica el season_id en sofascore.py")
+
+    with col_ss2:
+        if st.button("📥 Fixtures de la temporada", use_container_width=True, key="ss_fixtures"):
+            with st.spinner("Cargando desde Sofascore…"):
+                df_fx = load_fixtures(league)
+            if df_fx is not None and len(df_fx) > 0:
+                set_fixtures(league, df_fx)
+                st.success(f"✓ {len(df_fx)} partidos · {(~df_fx['played']).sum()} pendientes")
+                st.rerun()
+            else:
+                st.error("Error al cargar fixtures")
+
+    with col_ss3:
+        if st.button("📥 Stats de equipos", use_container_width=True, key="ss_stats"):
+            with st.spinner("Calculando stats desde partidos jugados…"):
+                stats = load_team_stats(league)
+            if stats:
+                for tabla, df_s in stats.items():
+                    set_table(league, tabla, df_s)
+                st.success(f"✓ Standard Squad y Standard Opp cargados")
+                st.rerun()
+            else:
+                st.error("Error al cargar stats")
+
+    st.caption(
+        "💡 Los stats de Sofascore dan goles/partido. "
+        "Para xG, tiros, faltas y disciplina sigue usando las tablas de FBRef abajo."
+    )
 
 dm = get_data_master(league)
 tables_loaded = len(dm)
