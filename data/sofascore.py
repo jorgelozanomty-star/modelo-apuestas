@@ -39,7 +39,15 @@ def _sofascore_available() -> bool:
         import esd  # noqa
         return True
     except ImportError:
-        return False
+        # Intentar instalar automáticamente si no está disponible
+        try:
+            import subprocess, sys
+            subprocess.check_call([sys.executable, "-m", "pip", "install",
+                                   "EasySoccerData", "--quiet"])
+            import esd  # noqa
+            return True
+        except Exception:
+            return False
 
 
 def load_standings(league: str) -> pd.DataFrame | None:
