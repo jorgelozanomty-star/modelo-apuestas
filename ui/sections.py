@@ -211,10 +211,11 @@ def section_picks(ctx: dict, cfg: dict):
     # Cards 1X2
     st.markdown(picks_row(picks), unsafe_allow_html=True)
 
-    # Over/Under con momios
+    # Over/Under con momios — picks guardados en session_state para poder agregarlos
+    ou_picks = []
     with st.expander("➕ Analizar Over / Under"):
         ou_cols = st.columns(3)
-        with ou_cols[0]: ou_line  = st.selectbox("Línea", [1.5, 2.5, 3.5], index=1)
+        with ou_cols[0]: ou_line  = st.selectbox("Línea", [1.5, 2.5, 3.5], index=1, key="ou_line")
         with ou_cols[1]: m_over   = st.number_input("Momio Over",  value=1.90, format="%.2f", min_value=1.01, key="m_over")
         with ou_cols[2]: m_under  = st.number_input("Momio Under", value=1.90, format="%.2f", min_value=1.01, key="m_under")
         ou_picks = evaluate_ou(
@@ -223,18 +224,19 @@ def section_picks(ctx: dict, cfg: dict):
         )
         st.markdown(picks_row(ou_picks), unsafe_allow_html=True)
 
-    # Selector de pick a agregar
+    # Todos los picks disponibles (1X2 + OU)
+    all_picks = picks + ou_picks
     st.markdown('<div style="margin-top:8px;"></div>', unsafe_allow_html=True)
-    all_picks_labels = [f"{p['name']} (EV: {p['ev']:+.1f}%)" for p in picks]
+    all_picks_labels = [f"{p['name']} (EV: {p['ev']:+.1f}%)" for p in all_picks]
     pa1, pa2 = st.columns([3, 1])
     with pa1:
-        pick_idx = st.selectbox("Pick a agregar a jornada", range(len(picks)),
+        pick_idx = st.selectbox("Pick a agregar a jornada", range(len(all_picks)),
                                 format_func=lambda i: all_picks_labels[i],
                                 key="pick_sel")
     with pa2:
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("＋ Agregar", use_container_width=True):
-            chosen = picks[pick_idx]
+            chosen = all_picks[pick_idx]
             st.session_state.jornada_pendientes.append({
                 "partido": f"{ctx['local']} vs {ctx['visita']}",
                 "pick":    chosen["name"],
