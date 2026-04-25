@@ -28,6 +28,8 @@ _VENUE_WORDS = {
     'Estadio','Azteca','Universitario','Hidalgo','Cuauhtémoc','Jalisco',
     'Akron','BBVA','Nemesio','TSM','Caliente','Olímpico','Victoria',
     'Corregidora','Kraken','Encanto',
+    # General / Italian
+    'Stadio','Stade','Stadion','Arena',
     # Bundesliga / German venues
     'Allianz','Signal','Iduna','Volksparkstadion','Voith','RheinEnergieSTADION',
     'BayArena','Volkswagen','PreZero','MHPArena','Europa-Park','Weserstadion',
@@ -42,9 +44,13 @@ _VENUE_WORDS = {
     'Martínez','Valero','Gran','Canaria','RCDE','Stadium',
     'Nuevo','Los','Cármenes','El','Sadar','San','Mamés',
     'Butarque','Ipurua','Municipal',
-    # Serie A
+    # Serie A / Italian venues
     'Giuseppe','Meazza','Olimpico','Maradona','Franchi','Ferraris',
     'Tardini','Castellani','Bentegodi','Unipol','Penzo',
+    'Ennio','Tardini','Dall','Ara','Renato','Marc','Antonio',
+    'Artemio','Comunale','Luigi','Ferraris','Dino','Manuzzi',
+    'Brianteo','Gewiss','Bluenergy','Arechi','Granillo',
+    'Teofilo','Patini','Zini','Druso','Friuli','Diego',
 }
 
 # Nombres completos de equipos conocidos para mejor split
@@ -67,7 +73,8 @@ _KNOWN_TEAMS = set(EQUIPOS_MAP.keys()) | set(EQUIPOS_MAP.values()) | {
     'Inter', 'Milan', 'Napoli', 'Juventus', 'Roma', 'Lazio',
     'Fiorentina', 'Atalanta', 'Bologna', 'Torino', 'Genoa',
     'Venezia', 'Verona', 'Parma', 'Monza', 'Empoli', 'Udinese',
-    'Cagliari', 'Como', 'Lecce',
+    'Cagliari', 'Como', 'Lecce', 'Sassuolo', 'Pisa', 'Cremonese',
+    'Frosinone', 'Salernitana', 'Spezia',
     # Liga MX nombres completos
     'Puebla', 'Querétaro', 'Necaxa', 'Toluca', 'Pachuca', 'Atlas',
     'Santos Laguna', 'Cruz Azul', 'América', 'Pumas', 'Tigres', 'Rayados',
