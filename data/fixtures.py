@@ -28,10 +28,38 @@ _VENUE_WORDS = {
     'Estadio','Azteca','Universitario','Hidalgo','Cuauhtémoc','Jalisco',
     'Akron','BBVA','Nemesio','TSM','Caliente','Olímpico','Victoria',
     'Corregidora','Kraken','Encanto',
+    # Bundesliga / German venues
+    'Allianz','Signal','Iduna','Volksparkstadion','Voith','RheinEnergieSTADION',
+    'BayArena','Volkswagen','PreZero','MHPArena','Europa-Park','Weserstadion',
+    'Olympiastadion','AOK','Donauarena','Schwarzwald','Mewa','Wildpark',
+    'Deutsche','Telekom','WWK','Coface','Commerzbank','Deutsche Bank',
+    # La Liga
+    'Bernabéu','Camp','Nou','Metropolitano','Pizjuán','Benito',
+    'Villamarín','Mestalla','Ceramic','Reale','Romareda',
+    # Serie A
+    'Giuseppe','Meazza','Olimpico','Maradona','Franchi','Ferraris',
+    'Tardini','Castellani','Bentegodi','Unipol','Penzo',
 }
 
 # Nombres completos de equipos conocidos para mejor split
 _KNOWN_TEAMS = set(EQUIPOS_MAP.keys()) | set(EQUIPOS_MAP.values()) | {
+    # Bundesliga
+    'Bayern München', 'Bayern', 'Borussia Dortmund', 'Dortmund',
+    'Bayer Leverkusen', 'Leverkusen', 'RB Leipzig', 'Leipzig',
+    'Eintracht Frankfurt', 'Frankfurt', 'Freiburg', 'Wolfsburg',
+    'Borussia Mönchengladbach', 'Gladbach', 'Stuttgart', 'Augsburg',
+    'Hoffenheim', 'Mainz', 'Heidenheim', 'Werder Bremen', 'Bremen',
+    'Hamburg', 'FC Köln', 'Köln', 'St. Pauli',
+    # La Liga
+    'Real Madrid', 'Barcelona', 'Atletico Madrid', 'Sevilla',
+    'Real Sociedad', 'Athletic Bilbao', 'Real Betis', 'Valencia',
+    'Villarreal', 'Osasuna', 'Mallorca', 'Celta', 'Getafe',
+    'Girona', 'Las Palmas', 'Alaves', 'Espanyol', 'Valladolid',
+    # Serie A
+    'Inter', 'Milan', 'Napoli', 'Juventus', 'Roma', 'Lazio',
+    'Fiorentina', 'Atalanta', 'Bologna', 'Torino', 'Genoa',
+    'Venezia', 'Verona', 'Parma', 'Monza', 'Empoli', 'Udinese',
+    'Cagliari', 'Como', 'Lecce',
     # Liga MX nombres completos
     'Puebla', 'Querétaro', 'Necaxa', 'Toluca', 'Pachuca', 'Atlas',
     'Santos Laguna', 'Cruz Azul', 'América', 'Pumas', 'Tigres', 'Rayados',
