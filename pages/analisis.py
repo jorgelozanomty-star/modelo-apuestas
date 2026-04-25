@@ -64,9 +64,7 @@ with f3:
         key="an_valor",
     )
 
-kelly_fraction = st.sidebar.slider("Kelly", 0.05, 1.0, 0.25, step=0.05,
-                                    label_visibility="collapsed") \
-    if st.sidebar else 0.25
+kelly_fraction = st.session_state.get("an_kelly", 0.25)
 
 # ── Todos los partidos ─────────────────────────────────────────────────────────
 all_matches = get_all_pending_matches()
@@ -428,7 +426,8 @@ if st.session_state.jornada_pendientes:
 with st.sidebar:
     st.markdown("---")
     st.markdown('<p style="font-size:0.62rem;font-weight:600;color:#44403c;text-transform:uppercase;letter-spacing:0.10em;">Kelly</p>', unsafe_allow_html=True)
-    kelly_fraction = st.slider("Kelly", 0.05, 1.0, 0.25, step=0.05, label_visibility="collapsed")
+    kelly_fraction = st.slider("Kelly", 0.05, 1.0, 0.25, step=0.05,
+                               label_visibility="collapsed", key="an_kelly")
     st.caption(f"Kelly ×{kelly_fraction:.2f}")
 
     st.markdown("---")
