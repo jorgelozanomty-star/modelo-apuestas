@@ -33,9 +33,15 @@ _VENUE_WORDS = {
     'BayArena','Volkswagen','PreZero','MHPArena','Europa-Park','Weserstadion',
     'Olympiastadion','AOK','Donauarena','Schwarzwald','Mewa','Wildpark',
     'Deutsche','Telekom','WWK','Coface','Commerzbank','Deutsche Bank',
-    # La Liga
+    # La Liga / Spanish venues
     'Bernabéu','Camp','Nou','Metropolitano','Pizjuán','Benito',
     'Villamarín','Mestalla','Ceramic','Reale','Romareda',
+    'Coliseum','Alfonso','Pérez','Riyadh','Air','Vallecas',
+    'Campo','Fútbol','Futbol',
+    'Montjuïc','Civitas','Power','Abanca','Balaídos','Mendizorroza',
+    'Martínez','Valero','Gran','Canaria','RCDE','Stadium',
+    'Nuevo','Los','Cármenes','El','Sadar','San','Mamés',
+    'Butarque','Ipurua','Municipal',
     # Serie A
     'Giuseppe','Meazza','Olimpico','Maradona','Franchi','Ferraris',
     'Tardini','Castellani','Bentegodi','Unipol','Penzo',
@@ -50,11 +56,13 @@ _KNOWN_TEAMS = set(EQUIPOS_MAP.keys()) | set(EQUIPOS_MAP.values()) | {
     'Borussia Mönchengladbach', 'Gladbach', 'Stuttgart', 'Augsburg',
     'Hoffenheim', 'Mainz', 'Heidenheim', 'Werder Bremen', 'Bremen',
     'Hamburg', 'FC Köln', 'Köln', 'St. Pauli',
-    # La Liga
-    'Real Madrid', 'Barcelona', 'Atletico Madrid', 'Sevilla',
-    'Real Sociedad', 'Athletic Bilbao', 'Real Betis', 'Valencia',
-    'Villarreal', 'Osasuna', 'Mallorca', 'Celta', 'Getafe',
-    'Girona', 'Las Palmas', 'Alaves', 'Espanyol', 'Valladolid',
+    # La Liga — nombres exactos FBRef
+    'Real Madrid', 'Barcelona', 'Atletico Madrid', 'Atlético Madrid',
+    'Sevilla', 'Real Sociedad', 'Athletic Bilbao', 'Athletic Club',
+    'Real Betis', 'Valencia', 'Villarreal', 'Osasuna', 'Mallorca',
+    'Celta', 'Celta Vigo', 'Getafe', 'Girona', 'Las Palmas',
+    'Alaves', 'Alavés', 'Espanyol', 'Valladolid', 'Leganés',
+    'Rayo Vallecano', 'Rayo', 'Levante', 'Leganes',
     # Serie A
     'Inter', 'Milan', 'Napoli', 'Juventus', 'Roma', 'Lazio',
     'Fiorentina', 'Atalanta', 'Bologna', 'Torino', 'Genoa',
