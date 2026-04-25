@@ -9,7 +9,7 @@ import pandas as pd
 from datetime import date
 
 from data.session   import init, get_data_master, set_table, set_fixtures, get_fixtures, export_session, import_session, get_ha_store, set_ha_store
-from data.parser    import process_fbref_paste
+from data.parser    import process_fbref_paste, parse_home_away_table
 from data.fixtures  import parse_fixtures
 from data.leagues   import LEAGUES, LEAGUE_NAMES
 from ui.styles import inject_css
