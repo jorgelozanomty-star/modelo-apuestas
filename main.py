@@ -18,7 +18,7 @@ pg_datos    = st.Page("pages/datos.py",    title="① Datos",    icon="📂", de
 pg_momios   = st.Page("pages/momios.py",   title="② Momios",   icon="💰")
 pg_analisis = st.Page("pages/analisis.py", title="③ Análisis", icon="🔬")
 
-nav = st.navigation([pg_datos, pg_momios, pg_analisis])
+nav = st.navigation([pg_datos, pg_momios, pg_analisis, pg_backtest])
 
 with st.sidebar:
     st.markdown("### ◈ Intelligence Pro")
