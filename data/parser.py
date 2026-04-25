@@ -451,126 +451,111 @@ def get_squad_list(data_master: dict) -> list[str]:
     return []
 
 
+
+
 # ── Home / Away split table parser ───────────────────────────────────────────
 
-def _parse_ha_block(s: str, sign: str) -> dict | None:
-    """Parse one home or away stats block from concatenated FBRef string."""
+def _parse_ha_block(s: str) -> dict | None:
+    """Parse one home or away stats block. Handles GD=0 (no sign)."""
     import re
     from itertools import product as _product
 
-    sign_m = re.search(re.escape(sign), s)
-    if not sign_m:
-        return None
-    before = s[:sign_m.start()]
-    rest   = s[sign_m.start()+1:]
-
-    pts_mp_m = re.search(r"(\d\.\d{2})$", rest)
+    pts_mp_m = re.search(r"\d\.\d{2}$", s)
     if not pts_mp_m:
         return None
     pts_mp = float(pts_mp_m.group())
-    prefix = rest[:pts_mp_m.start()]
+    rest   = s[:pts_mp_m.start()]
 
-    result = None
-    for i in range(1, len(prefix)+1):
-        gd_d   = prefix[:i]
-        pts_s  = prefix[i:]
-        if not gd_d.isdigit():
-            continue
-        if pts_s and not pts_s.isdigit():
-            continue
-        gd  = int(sign + gd_d)
-        pts = int(pts_s) if pts_s else 0
-        if not (0 <= pts <= 114 and -60 <= gd <= 60):
-            continue
-        n = len(before)
-        for widths in _product([1,2], repeat=6):
-            if sum(widths) != n:
-                continue
-            nums = []; pos = 0
-            for w in widths:
-                nums.append(int(before[pos:pos+w])); pos += w
-            mp, ww, d, l, gf, ga = nums
-            if gf - ga == gd and ww + d + l == mp and mp <= 38:
-                result = {"MP": mp, "W": ww, "D": d, "L": l,
-                          "GF": gf, "GA": ga, "GD": gd,
-                          "Pts": pts, "Pts_MP": pts_mp}
-                break
-        if result:
-            break
-    return result
+    # Case 1: GD has a sign (+ or -)
+    sign_m = re.search(r"[+\-]", rest)
+    if sign_m:
+        sign   = sign_m.group()
+        before = rest[:sign_m.start()]
+        after  = rest[sign_m.start()+1:]
+        for i in range(1, len(after)+1):
+            gd_d, pts_s = after[:i], after[i:]
+            if not gd_d.isdigit(): continue
+            if pts_s and not pts_s.isdigit(): continue
+            gd  = int(sign + gd_d)
+            pts = int(pts_s) if pts_s else 0
+            if not (0 <= pts <= 114 and -60 <= gd <= 60): continue
+            n = len(before)
+            for widths in _product([1,2], repeat=6):
+                if sum(widths) != n: continue
+                nums = []; pos = 0
+                for w in widths:
+                    nums.append(int(before[pos:pos+w])); pos += w
+                mp,ww,d,l,gf,ga = nums
+                if gf-ga==gd and ww+d+l==mp and mp<=38:
+                    return {"MP":mp,"W":ww,"D":d,"L":l,"GF":gf,"GA":ga,
+                            "GD":gd,"Pts":pts,"Pts_MP":pts_mp}
+
+    # Case 2: GD=0 (no sign) — rest = MP W D L GF GA 0 Pts
+    n = len(rest)
+    for widths in _product([1,2], repeat=8):
+        if sum(widths) != n: continue
+        nums = []; pos = 0
+        for w in widths:
+            nums.append(int(rest[pos:pos+w])); pos += w
+        mp,ww,d,l,gf,ga,gd,pts = nums
+        if gd==0 and gf==ga and ww+d+l==mp and mp<=38 and 0<=pts<=114:
+            return {"MP":mp,"W":ww,"D":d,"L":l,"GF":gf,"GA":ga,
+                    "GD":0,"Pts":pts,"Pts_MP":pts_mp}
+    return None
 
 
 def parse_home_away_table(text: str) -> dict | None:
     """
-    Parsea la tabla Home/Away de clasificación de FBRef.
-    Retorna dict {squad_name: {"home": {...}, "away": {...}}}
-    con goles por partido de local y visita para cada equipo.
+    Parsea la tabla Home/Away de FBRef.
+    Acepta el formato con links markdown: [Nombre](url)
+    Retorna dict {squad: {home:{...}, away:{...}, gf_home_pg, ga_home_pg, gf_away_pg, ga_away_pg}}
     """
     import re
     if not text or len(text) < 20:
         return None
 
+    # Encontrar inicio del primer equipo
+    m0 = re.search(r"\d+\s+\[", text)
+    if not m0:
+        return None
+    text = text[m0.start():]
+
+    # Dividir en entries por equipo: el límite es X.XX seguido de rank [
+    parts = re.split(r"(?<=\d\.\d{2})(?=\d+\s+\[)", text)
+
     result = {}
-    lines = [l.strip() for l in text.replace("\r\n","\n").replace("\r","\n").split("\n")]
-
-    for line in lines:
-        line = line.replace("Club Crest","").strip()
-        if not line:
+    for part in parts:
+        part = part.strip()
+        if not part:
             continue
-        # Skip header rows
-        if "Home" in line and "Away" in line:
+        m = re.match(r"\d+\s+\[([^\]]+)\]\([^)]+\)([\s\S]*)", part)
+        if not m:
             continue
+        name  = m.group(1).strip()
+        stats = re.sub(r"[^\d+\-.]", "", m.group(2).strip())
 
-        # Remove rank number at start
-        line = re.sub(r"^\d+\s*", "", line)
-        # Remove URLs / markdown links
-        line = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", line)
-
-        # Find the stats block: two Pts/MP decimals
-        pts_mps = list(re.finditer(r"\d\.\d{2}", line))
+        # Dividir en bloque home/away usando el primer Pts/MP como frontera
+        pts_mps = list(re.finditer(r"\d\.\d{2}", stats))
         if len(pts_mps) < 2:
             continue
+        split  = pts_mps[0].end()
+        home_s = stats[:split]
+        away_s = stats[split:]
 
-        # Split line: team name + stats
-        split = pts_mps[0].end()
-        stats_str = line[split - 20:split + 20]  # narrow window around first decimal
-
-        # Find the full stats string: everything from first digit-block to end
-        m_stats = re.search(r"(\d[\d+\-.]+\d\.\d{2}[\d+\-.]+\d\.\d{2})", line)
-        if not m_stats:
-            continue
-        stats_str = m_stats.group(1)
-        team_part = line[:m_stats.start()].strip()
-        squad = EQUIPOS_MAP.get(team_part.strip(), team_part.strip())
-        if not squad:
+        h = _parse_ha_block(home_s)
+        a = _parse_ha_block(away_s)
+        if not h or not a:
             continue
 
-        # Find split between home and away blocks
-        pts_mps2 = list(re.finditer(r"\d\.\d{2}", stats_str))
-        if len(pts_mps2) < 2:
-            continue
-        split2 = pts_mps2[0].end()
-        home_s = stats_str[:split2]
-        away_s = stats_str[split2:]
-
-        h_sign = "+" if "+" in home_s else ("-" if "-" in home_s else None)
-        a_sign = "+" if "+" in away_s else ("-" if "-" in away_s else None)
-        if not h_sign or not a_sign:
-            continue
-
-        h = _parse_ha_block(home_s, h_sign)
-        a = _parse_ha_block(away_s, a_sign)
-
-        if h and a and squad:
-            result[squad] = {
-                "home": h,
-                "away": a,
-                "gf_home_pg": round(h["GF"] / max(h["MP"],1), 3),
-                "ga_home_pg": round(h["GA"] / max(h["MP"],1), 3),
-                "gf_away_pg": round(a["GF"] / max(a["MP"],1), 3),
-                "ga_away_pg": round(a["GA"] / max(a["MP"],1), 3),
-                "pts_home_pg": h["Pts_MP"],
-                "pts_away_pg": a["Pts_MP"],
-            }
+        norm_name = EQUIPOS_MAP.get(name, name)
+        result[norm_name] = {
+            "home": h, "away": a,
+            "gf_home_pg": round(h["GF"] / max(h["MP"],1), 3),
+            "ga_home_pg": round(h["GA"] / max(h["MP"],1), 3),
+            "gf_away_pg": round(a["GF"] / max(a["MP"],1), 3),
+            "ga_away_pg": round(a["GA"] / max(a["MP"],1), 3),
+            "pts_home_pg": h["Pts_MP"],
+            "pts_away_pg": a["Pts_MP"],
+        }
 
     return result if result else None
