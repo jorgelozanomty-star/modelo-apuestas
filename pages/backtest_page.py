@@ -250,8 +250,16 @@ else:
                     "m_btts_si": 0.0,
                     "m_btts_no": 0.0,
                 })
-                df_bt = df_bt[df_bt["m_l"] > 1].reset_index(drop=True)
-                st.success(f"✓ {len(df_bt)} partidos convertidos desde football-data.co.uk")
+                # Clean data: drop rows with invalid odds or scores
+                df_bt = df_bt[
+                    (df_bt["m_l"] > 1.01) & (df_bt["m_l"] < 50) &
+                    (df_bt["m_e"] > 1.01) & (df_bt["m_e"] < 50) &
+                    (df_bt["m_v"] > 1.01) & (df_bt["m_v"] < 50) &
+                    df_bt["score"].str.match(r"^\d+-\d+$", na=False) &
+                    df_bt["home"].str.len().gt(2) &
+                    df_bt["away"].str.len().gt(2)
+                ].reset_index(drop=True)
+                st.success(f"✓ {len(df_bt)} partidos válidos convertidos desde football-data.co.uk")
 
             else:
                 # ── Formato propio ────────────────────────────────────────────

@@ -198,7 +198,13 @@ def ejecutar_backtest(
         )
 
         ganancia = monto * (momio_ - 1) if ganado else -monto
+        
+        # Sanity check on ganancia
+        if abs(ganancia) > bankroll * 2:
+            continue  # skip this corrupt row
+        
         bankroll += ganancia
+        bankroll = max(0.01, bankroll)  # never go below 0
         evolucion.append(round(bankroll, 2))
 
         apuestas_total += 1
@@ -226,12 +232,20 @@ def ejecutar_backtest(
         })
 
     # ── Métricas finales ──────────────────────────────────────────────────────
-    roi = ((bankroll - bankroll_inicial) / bankroll_inicial) * 100 if bankroll_inicial > 0 else 0
+    try:
+        roi = ((bankroll - bankroll_inicial) / bankroll_inicial) * 100 if bankroll_inicial > 0 else 0
+        roi = max(-100.0, min(roi, 10000.0))  # cap at ±10000%
+    except (OverflowError, ZeroDivisionError):
+        roi = 0.0
     tasa = (apuestas_ganad / apuestas_total * 100) if apuestas_total > 0 else 0
 
     # Yield real (ganancia / total expuesto)
     total_exp = sum(abs(h["monto"]) for h in historial)
-    yield_ = (bankroll - bankroll_inicial) / total_exp * 100 if total_exp > 0 else 0
+    try:
+        yield_ = (bankroll - bankroll_inicial) / total_exp * 100 if total_exp > 0 else 0
+        yield_ = max(-100.0, min(yield_, 1000.0))
+    except (OverflowError, ZeroDivisionError):
+        yield_ = 0.0
 
     metricas = {
         "bankroll_inicial":  round(bankroll_inicial, 2),
