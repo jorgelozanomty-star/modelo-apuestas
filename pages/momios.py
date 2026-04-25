@@ -178,7 +178,7 @@ for league_name, group in groupby(all_matches, key=lambda x: x["league"]):
         unsafe_allow_html=True,
     )
 
-    for m in group_list:
+    for m_idx, m in enumerate(group_list):
         key    = m["key"]
         home   = m["home"]
         away   = m["away"]
