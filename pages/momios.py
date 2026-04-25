@@ -189,31 +189,32 @@ for league_name, group in groupby(all_matches, key=lambda x: x["league"]):
             f"{'🟢' if saved.get('m_l') else '⚪'} {d_str} · **{home}** vs {away}",
             expanded=not bool(saved.get("m_l"))
         ):
+            safe_key = key.replace(" ", "_").replace("/", "_").replace(".", "_").replace("-","_")
             # 1X2
             c1, c2, c3 = st.columns(3)
             m_l = c1.number_input("Local",  value=float(saved.get("m_l", 0) or 0),
-                                  format="%.2f", min_value=0.0, key=f"ml_{key}")
+                                  format="%.2f", min_value=0.0, key=f"ml_{safe_key}")
             m_e = c2.number_input("Empate", value=float(saved.get("m_e", 0) or 0),
-                                  format="%.2f", min_value=0.0, key=f"me_{key}")
+                                  format="%.2f", min_value=0.0, key=f"me_{safe_key}")
             m_v = c3.number_input("Visita", value=float(saved.get("m_v", 0) or 0),
-                                  format="%.2f", min_value=0.0, key=f"mv_{key}")
+                                  format="%.2f", min_value=0.0, key=f"mv_{safe_key}")
 
             # Over/Under + BTTS
             c4, c5, c6, c7, c8 = st.columns(5)
             linea    = c4.selectbox("Línea", [1.5, 2.5, 3.5],
                                     index=[1.5,2.5,3.5].index(saved.get("linea_ou", 2.5))
                                     if saved.get("linea_ou") in [1.5,2.5,3.5] else 1,
-                                    key=f"ln_{key}")
+                                    key=f"ln_{safe_key}")
             m_over   = c5.number_input("Over",   value=float(saved.get("m_over",   0) or 0),
-                                        format="%.2f", min_value=0.0, key=f"mov_{key}")
+                                        format="%.2f", min_value=0.0, key=f"mov_{safe_key}")
             m_under  = c6.number_input("Under",  value=float(saved.get("m_under",  0) or 0),
-                                        format="%.2f", min_value=0.0, key=f"mun_{key}")
+                                        format="%.2f", min_value=0.0, key=f"mun_{safe_key}")
             m_bts    = c7.number_input("BTTS Sí",value=float(saved.get("m_btts_si",0) or 0),
-                                        format="%.2f", min_value=0.0, key=f"bts_{key}")
+                                        format="%.2f", min_value=0.0, key=f"bts_{safe_key}")
             m_btn    = c8.number_input("BTTS No",value=float(saved.get("m_btts_no",0) or 0),
-                                        format="%.2f", min_value=0.0, key=f"btn_{key}")
+                                        format="%.2f", min_value=0.0, key=f"btn_{safe_key}")
 
-            if st.button("💾 Guardar", key=f"save_{key}", use_container_width=False):
+            if st.button("💾 Guardar", key=f"save_{safe_key}", use_container_width=False):
                 set_momios(key, {
                     "m_l": m_l, "m_e": m_e, "m_v": m_v,
                     "linea_ou": linea, "m_over": m_over, "m_under": m_under,
