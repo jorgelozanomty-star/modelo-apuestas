@@ -36,12 +36,15 @@ _KNOWN_TEAMS = set(EQUIPOS_MAP.keys()) | set(EQUIPOS_MAP.values()) | {
     'Puebla', 'Querétaro', 'Necaxa', 'Toluca', 'Pachuca', 'Atlas',
     'Santos Laguna', 'Cruz Azul', 'América', 'Pumas', 'Tigres', 'Rayados',
     'Chivas', 'Xolos', 'Juárez', 'Mazatlán', 'San Luis', 'León',
-    # Premier League
+    # Premier League — nombres exactos como aparecen en FBRef fixtures
     'Sunderland', 'Fulham', 'Liverpool', 'Arsenal', 'Chelsea', 'Everton',
-    'Brentford', 'Brighton', 'Bournemouth', 'Newcastle United',
-    'Nottingham Forest', 'Manchester United', 'Manchester City',
-    'Crystal Palace', 'Aston Villa', 'West Ham United',
-    'Wolverhampton Wanderers', 'Tottenham Hotspur', 'Leeds United',
+    'Brentford', 'Brighton', 'Bournemouth', 'Newcastle United', 'Newcastle',
+    'Nottingham Forest', 'Nottm Forest', 'Manchester United', 'Man United',
+    'Manchester City', 'Man City', 'Crystal Palace', 'Aston Villa',
+    'West Ham', 'West Ham United', 'Wolves', 'Wolverhampton Wanderers',
+    'Tottenham', 'Tottenham Hotspur', 'Leeds', 'Leeds United',
+    'Leicester', 'Leicester City', 'Ipswich', 'Ipswich Town',
+    'Burnley', 'Luton', 'Luton Town', 'Sheffield United',
 }
 
 def _split_home_away(tokens):

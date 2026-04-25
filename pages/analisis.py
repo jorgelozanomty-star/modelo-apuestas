@@ -206,6 +206,12 @@ if not active_key:
     st.info("Selecciona un partido de la lista para ver el análisis.")
     st.stop()
 
+# Detectar cambio de partido y limpiar keys de momios
+if st.session_state.get("_last_active_key") != active_key:
+    for k in ["an_ml", "an_me", "an_mv", "an_over", "an_under", "an_bts", "an_btn"]:
+        st.session_state.pop(k, None)
+    st.session_state["_last_active_key"] = active_key
+
 # Encontrar match activo
 active_match = next((m for m in get_all_pending_matches() if m["key"] == active_key), None)
 if not active_match:
