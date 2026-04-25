@@ -206,11 +206,7 @@ if not active_key:
     st.info("Selecciona un partido de la lista para ver el análisis.")
     st.stop()
 
-# Detectar cambio de partido y limpiar keys de momios
-if st.session_state.get("_last_active_key") != active_key:
-    for k in ["an_ml", "an_me", "an_mv", "an_over", "an_under", "an_bts", "an_btn"]:
-        st.session_state.pop(k, None)
-    st.session_state["_last_active_key"] = active_key
+# Dynamic keys per match handle state isolation
 
 # Encontrar match activo
 active_match = next((m for m in get_all_pending_matches() if m["key"] == active_key), None)
@@ -239,9 +235,9 @@ st.markdown(f"""
 st.markdown('<div class="sec-label">Momios</div>', unsafe_allow_html=True)
 
 mc1, mc2, mc3 = st.columns(3)
-with mc1: m_l = st.number_input(f"Local {local[:12]}", value=float(momios.get("m_l",2.0) or 2.0), format="%.2f", min_value=1.01, key="an_ml")
-with mc2: m_e = st.number_input("Empate", value=float(momios.get("m_e",3.0) or 3.0), format="%.2f", min_value=1.01, key="an_me")
-with mc3: m_v = st.number_input(f"Visita {visita[:12]}", value=float(momios.get("m_v",3.0) or 3.0), format="%.2f", min_value=1.01, key="an_mv")
+with mc1: m_l = st.number_input(f"Local {local[:12]}", value=float(momios.get("m_l",2.0) or 2.0), format="%.2f", min_value=1.01, key=f"an_ml_{active_key}")
+with mc2: m_e = st.number_input("Empate", value=float(momios.get("m_e",3.0) or 3.0), format="%.2f", min_value=1.01, key=f"an_me_{active_key}")
+with mc3: m_v = st.number_input(f"Visita {visita[:12]}", value=float(momios.get("m_v",3.0) or 3.0), format="%.2f", min_value=1.01, key=f"an_mv_{active_key}")
 
 OR   = overround([m_l, m_e, m_v])
 vf   = remove_vig([m_l, m_e, m_v])
@@ -346,12 +342,12 @@ try:
 
     with st.expander("➕ Over / Under"):
         oc1, oc2, oc3 = st.columns(3)
-        ou_line = oc1.selectbox("Línea", [1.5, 2.5, 3.5], index=1, key="an_ou_line")
+        ou_line = oc1.selectbox("Línea", [1.5, 2.5, 3.5], index=1, key=f"an_ou_line_{active_key}")
         ou_line_val = float(momios.get("linea_ou", 2.5) or 2.5)
         ou_over_def  = float(momios.get("m_over",  1.90) or 1.90)
         ou_under_def = float(momios.get("m_under", 1.90) or 1.90)
-        m_over  = oc2.number_input("Over",  value=ou_over_def,  format="%.2f", min_value=1.01, key="an_over")
-        m_under = oc3.number_input("Under", value=ou_under_def, format="%.2f", min_value=1.01, key="an_under")
+        m_over  = oc2.number_input("Over",  value=ou_over_def,  format="%.2f", min_value=1.01, key=f"an_over_{active_key}")
+        m_under = oc3.number_input("Under", value=ou_under_def, format="%.2f", min_value=1.01, key=f"an_under_{active_key}")
         from core.value import evaluate_ou
         ou_picks = evaluate_ou(markets, ou_line, m_over, m_under,
                                kelly_fraction, st.session_state.banca_actual)
@@ -361,8 +357,8 @@ try:
         bc1, bc2 = st.columns(2)
         bts_def = float(momios.get("m_btts_si", 1.80) or 1.80)
         btn_def = float(momios.get("m_btts_no", 1.95) or 1.95)
-        m_bts = bc1.number_input("BTTS Sí", value=bts_def, format="%.2f", min_value=1.01, key="an_bts")
-        m_btn = bc2.number_input("BTTS No", value=btn_def, format="%.2f", min_value=1.01, key="an_btn")
+        m_bts = bc1.number_input("BTTS Sí", value=bts_def, format="%.2f", min_value=1.01, key=f"an_bts_{active_key}")
+        m_btn = bc2.number_input("BTTS No", value=btn_def, format="%.2f", min_value=1.01, key=f"an_btn_{active_key}")
         btts_picks = [
             evaluate_pick("BTTS Sí", markets["btts"],    m_bts, kelly_fraction, st.session_state.banca_actual),
             evaluate_pick("BTTS No", markets["no_btts"], m_btn, kelly_fraction, st.session_state.banca_actual),
@@ -376,7 +372,7 @@ try:
     pa1, pa2 = st.columns([3, 1])
     with pa1:
         pick_idx = st.selectbox("Pick a agregar", range(len(all_picks)),
-                                format_func=lambda i: labels[i], key="an_pick_sel")
+                                format_func=lambda i: labels[i], key=f"an_pick_{active_key}")
     with pa2:
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("＋ Agregar", use_container_width=True, key="an_add"):
