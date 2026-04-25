@@ -48,32 +48,41 @@ with st.expander("📋 Cargar momios desde JSON (generado por Claude en el chat)
             parsed = json.loads(clean)
             imported = 0
             skipped  = []
-            # Obtener todas las claves de fixtures para fuzzy matching
-            all_fixture_keys = list(st.session_state.get("momios_store", {}).keys())
-            # También obtener claves de todos los partidos pendientes
             from data.session import get_all_pending_matches
+            from data.parser import EQUIPOS_MAP
             pending = get_all_pending_matches()
             fixture_keys_map = {m["key"].lower(): m["key"] for m in pending}
 
             for p in parsed.get("partidos", []):
-                local_  = str(p.get("local",  "")).strip()
-                visita_ = str(p.get("visita", "")).strip()
+                local_  = EQUIPOS_MAP.get(str(p.get("local",  "")).strip(),
+                                          str(p.get("local",  "")).strip())
+                visita_ = EQUIPOS_MAP.get(str(p.get("visita", "")).strip(),
+                                          str(p.get("visita", "")).strip())
                 if not local_ or not visita_:
                     continue
 
-                # Intentar coincidencia exacta primero
+                # 1. Coincidencia exacta
                 key_ = f"{local_} vs {visita_}"
-                # Luego fuzzy: buscar fixture que contenga ambos nombres
+
+                # 2. Fuzzy: buscar fixture con nombres similares
                 best_key = key_
                 if key_.lower() not in fixture_keys_map:
+                    best_score = 0
                     for fk_lower, fk_real in fixture_keys_map.items():
-                        home_fk = fk_lower.split(" vs ")[0] if " vs " in fk_lower else ""
-                        away_fk = fk_lower.split(" vs ")[1] if " vs " in fk_lower else ""
-                        if (local_.lower() in home_fk or home_fk in local_.lower()) and                            (visita_.lower() in away_fk or away_fk in visita_.lower()):
+                        parts = fk_lower.split(" vs ")
+                        if len(parts) != 2: continue
+                        home_fk, away_fk = parts
+                        # Coincidencia parcial en ambos lados
+                        h_match = (local_.lower() in home_fk or
+                                   home_fk in local_.lower() or
+                                   any(w in home_fk for w in local_.lower().split() if len(w) > 3))
+                        a_match = (visita_.lower() in away_fk or
+                                   away_fk in visita_.lower() or
+                                   any(w in away_fk for w in visita_.lower().split() if len(w) > 3))
+                        if h_match and a_match:
                             best_key = fk_real
                             break
 
-                existing = get_momios(best_key)
                 new_vals = {k: v for k, v in {
                     "m_l":       p.get("m_l",       0),
                     "m_e":       p.get("m_e",       0),
@@ -84,6 +93,7 @@ with st.expander("📋 Cargar momios desde JSON (generado por Claude en el chat)
                     "m_btts_si": p.get("m_btts_si", 0),
                     "m_btts_no": p.get("m_btts_no", 0),
                 }.items() if v and v > 0}
+                existing = get_momios(best_key)
                 set_momios(best_key, {**existing, **new_vals})
                 imported += 1
             if imported:
