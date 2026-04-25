@@ -142,7 +142,7 @@ for m in all_matches:
 # Filtro valor
 if filtro_valor == "Solo con valor (EV+)":
     all_matches = [m for m in all_matches if m.get("best_ev") is not None
-                   and m["best_ev"] > 0 and m.get("best_prob", 0) >= 40.0]
+                   and m["best_ev"] > 0]
 elif filtro_valor == "Solo con momios":
     all_matches = [m for m in all_matches if m["has_momios"]]
 
@@ -182,22 +182,22 @@ for league_name, group in groupby(all_matches, key=lambda x: x["league"]):
         pick_name = m.get("best_pick", "")
         min_prob = 40.0  # filtro de probabilidad mínima
 
-        # Semáforo — verde solo si EV+ AND prob >= 40%
+                # Semáforo — todos visibles, colores orientativos
         if not has_mom:
-            dot = "⚪"; dot_color = "#a8a29e"
+            dot = "⚪"; dot_color = "#a8a29e"; tip = "sin momios"
         elif ev is None:
-            dot = "🔵"; dot_color = "#0891b2"
+            dot = "🔵"; dot_color = "#0891b2"; tip = "calculando"
         elif ev > 0 and prob >= min_prob:
-            dot = "🟢"; dot_color = "#16a34a"   # valor real: EV+ y prob >= 40%
+            dot = "🟢"; dot_color = "#16a34a"; tip = "VALOR {} {:.0f}% EV {:+.1f}%".format(pick_name, prob, ev)
         elif ev > 0 and prob < min_prob:
-            dot = "🟡"; dot_color = "#d97706"   # EV+ pero prob baja
+            dot = "🟡"; dot_color = "#d97706"; tip = "EV+ prob baja {} {:.0f}%".format(pick_name, prob)
         elif ev > -5:
-            dot = "🟠"; dot_color = "#ea580c"   # EV negativo pequeño
+            dot = "🟠"; dot_color = "#ea580c"; tip = "sin valor EV {:+.1f}%".format(ev)
         else:
-            dot = "🔴"; dot_color = "#dc2626"   # sin valor
+            dot = "🔴"; dot_color = "#dc2626"; tip = "sin valor EV {:+.1f}%".format(ev)
 
-        ev_txt = f"EV: {ev:+.1f}% · {prob:.0f}% ({pick_name})" if ev is not None else "sin EV"
-        d_str  = f"{m['date'].strftime('%d/%m')} {m['time']}"
+        ev_txt = tip if ev is not None else "sin momios"
+        d_str  = "{} {}".format(m['date'].strftime('%d/%m'), m['time'])
 
         border = "#4f46e5" if is_active else "#e7e5e0"
         bg     = "#f5f3ff" if is_active else "#ffffff"
@@ -416,6 +416,103 @@ try:
 except Exception as e:
     st.error(f"Error en el análisis: {e}")
     st.caption("Asegúrate de tener tablas FBRef cargadas en la Página 1.")
+
+# ── Parlay ────────────────────────────────────────────────────────────────────
+st.markdown('<div class="sec-label">Parlay</div>', unsafe_allow_html=True)
+
+with st.expander("🔗 Armar Parlay (combinada de 2-3 picks)"):
+    st.caption("Selecciona picks de distintos partidos. La app calcula prob combinada y EV del parlay.")
+
+    from data.session import get_all_pending_matches
+    all_pending_pl = get_all_pending_matches()
+    parlay_opts = {}
+    for pm in all_pending_pl:
+        if not pm["has_momios"]: continue
+        pm_momios = pm["momios"]
+        pm_dm = get_data_master(pm["league"])
+        try:
+            from data.profile import build_team_profile, calc_lambdas
+            from core.poisson import calc_all_markets
+            pf_l = build_team_profile(pm["home"], pm_dm, pm["league"])
+            pf_v = build_team_profile(pm["away"], pm_dm, pm["league"])
+            ll, lv = calc_lambdas(pf_l, pf_v, pm["league"])
+            pm_mkts = calc_all_markets(ll, lv)
+            picks_list = []
+            if pm_momios.get("m_l",0) > 1:
+                picks_list.append((pm["home"][:14], pm_mkts["p_l"], pm_momios["m_l"]))
+            if pm_momios.get("m_e",0) > 1:
+                picks_list.append(("Empate", pm_mkts["p_e"], pm_momios["m_e"]))
+            if pm_momios.get("m_v",0) > 1:
+                picks_list.append((pm["away"][:14], pm_mkts["p_v"], pm_momios["m_v"]))
+            if pm_momios.get("m_over",0) > 1:
+                linea = pm_momios.get("linea_ou", 2.5)
+                picks_list.append(("Over " + str(linea), pm_mkts.get("over25",0), pm_momios["m_over"]))
+            if pm_momios.get("m_under",0) > 1:
+                linea = pm_momios.get("linea_ou", 2.5)
+                picks_list.append(("Under " + str(linea), pm_mkts.get("under25",0), pm_momios["m_under"]))
+            if picks_list:
+                parlay_opts[pm["key"]] = picks_list
+        except Exception:
+            continue
+
+    if len(parlay_opts) < 2:
+        st.info("Necesitas momios en al menos 2 partidos para armar un parlay.")
+    else:
+        n_legs = st.radio("Selecciones", [2, 3], horizontal=True, key="pl_legs")
+        legs = []
+        for i in range(n_legs):
+            lc1, lc2 = st.columns([3, 2])
+            with lc1:
+                part_sel = st.selectbox("Partido " + str(i+1),
+                                        list(parlay_opts.keys()),
+                                        key="pl_partido_" + str(i))
+            with lc2:
+                opt_picks = parlay_opts[part_sel]
+                pl_labels = [p[0] + " @" + str(round(p[2],2)) + " (" + str(round(p[1]*100,0)) + "%)" for p in opt_picks]
+                pi = st.selectbox("Pick", range(len(pl_labels)),
+                                  format_func=lambda x: pl_labels[x],
+                                  key="pl_pick_" + str(i))
+                legs.append(opt_picks[pi])
+
+        if legs:
+            prob_comb  = 1.0
+            momio_comb = 1.0
+            for _, prob, momio in legs:
+                prob_comb  *= prob
+                momio_comb *= momio
+
+            ev_pl = (prob_comb * momio_comb - 1) * 100
+            b_val = momio_comb - 1
+            kelly_pl = max(0.0, (prob_comb * b_val - (1 - prob_comb)) / b_val) if b_val > 0 else 0.0
+            kelly_fr  = st.session_state.get("an_kelly", 0.25)
+            stake_pl  = min(kelly_pl * kelly_fr, 0.05)
+            monto_pl  = round(st.session_state.banca_actual * stake_pl, 2)
+
+            ev_color = "#16a34a" if ev_pl > 0 else "#dc2626"
+            summary = (
+                "**Prob combinada:** " + str(round(prob_comb*100,1)) + "%  ·  "
+                "**Momio combinado:** @" + str(round(momio_comb,2)) + "  ·  "
+                "**EV:** " + ("+" if ev_pl>=0 else "") + str(round(ev_pl,1)) + "%  ·  "
+                "**Stake:** $" + str(monto_pl)
+            )
+            st.markdown(summary)
+
+            if ev_pl > 0:
+                if st.button("＋ Agregar parlay a jornada", key="pl_add"):
+                    picks_str = " + ".join(l[0] + "@" + str(round(l[2],2)) for l in legs)
+                    st.session_state.jornada_pendientes.append({
+                        "partido": " | ".join(l[0] for l in legs),
+                        "pick":    "PARLAY: " + picks_str,
+                        "momio":   round(momio_comb, 2),
+                        "stake":   monto_pl,
+                        "ev":      round(ev_pl, 2),
+                        "prob":    round(prob_comb * 100, 1),
+                        "edge":    0.0,
+                        "estado":  "Pendiente",
+                    })
+                    st.rerun()
+            else:
+                st.warning("EV negativo — este parlay no tiene valor matemático con los parámetros actuales.")
 
 # ── Jornada activa ─────────────────────────────────────────────────────────────
 if st.session_state.jornada_pendientes:
