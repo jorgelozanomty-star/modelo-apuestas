@@ -30,10 +30,20 @@ EQUIPOS_MAP: dict = {
     "FC Juárez": "Juárez", "Tijuana": "Xolos",
     "Club Tijuana": "Xolos", "Puebla": "Puebla",
     "Atlético San Luis": "San Luis",
-    # Premier League (nombres alternativos comunes en FBRef)
+    # Premier League (nombres alternativos comunes en FBRef y Team Mexico)
     "Manchester City": "Man City", "Manchester Utd": "Man United",
-    "Newcastle Utd": "Newcastle", "Nott'ham Forest": "Nottm Forest",
-    "Tottenham": "Spurs",
+    "Manchester United": "Man United",
+    "Newcastle Utd": "Newcastle", "Newcastle United": "Newcastle",
+    "Nott'ham Forest": "Nottm Forest", "Nottingham Forest": "Nottm Forest",
+    "Tottenham": "Spurs", "Tottenham Hotspur": "Spurs",
+    "Wolverhampton Wanderers": "Wolves", "Wolverhampton": "Wolves",
+    "Wolverhampton Wanderers FC": "Wolves",
+    "West Ham United": "West Ham", "West Ham United FC": "West Ham",
+    "Aston Villa FC": "Aston Villa",
+    "Arsenal FC": "Arsenal", "Liverpool FC": "Liverpool",
+    "Crystal Palace FC": "Crystal Palace",
+    "Brentford FC": "Brentford", "Fulham FC": "Fulham",
+    "Chelsea FC": "Chelsea", "Everton FC": "Everton",
     # Bundesliga
     "Bayer Leverkusen": "Leverkusen", "RB Leipzig": "Leipzig",
     "Borussia Dortmund": "Dortmund", "Borussia M'gladbach": "Gladbach",
