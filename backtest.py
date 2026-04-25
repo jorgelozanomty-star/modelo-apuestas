@@ -178,6 +178,14 @@ def ejecutar_backtest(
         if monto <= 0:
             continue
 
+        # Sanity check — descartar filas con datos corruptos
+        if monto > bankroll * 0.25:     # nunca más del 25% de banca en un bet
+            continue
+        if momio_ > 20:                  # momios > 20 son probablemente errores
+            continue
+        if momio_ < 1.01:
+            continue
+
         # ── Resultado ─────────────────────────────────────────────────────────
         ganado = (
             (pick_ == "local"   and resultado_real == "local")  or
