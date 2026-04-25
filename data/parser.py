@@ -35,7 +35,7 @@ EQUIPOS_MAP: dict = {
     "Manchester United": "Man United",
     "Newcastle Utd": "Newcastle", "Newcastle United": "Newcastle",
     "Nott'ham Forest": "Nottm Forest", "Nottingham Forest": "Nottm Forest",
-    "Tottenham": "Spurs", "Tottenham Hotspur": "Spurs",
+    "Tottenham": "Tottenham Hotspur",
     "Wolverhampton Wanderers": "Wolves", "Wolverhampton": "Wolves",
     "Wolverhampton Wanderers FC": "Wolves",
     "West Ham United": "West Ham", "West Ham United FC": "West Ham",
