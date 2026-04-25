@@ -16,7 +16,8 @@ init()
 
 pg_datos    = st.Page("pages/datos.py",    title="① Datos",    icon="📂", default=True)
 pg_momios   = st.Page("pages/momios.py",   title="② Momios",   icon="💰")
-pg_analisis = st.Page("pages/analisis.py", title="③ Análisis", icon="🔬")
+pg_analisis = st.Page("pages/analisis.py",    title="③ Análisis", icon="🔬")
+pg_backtest = st.Page("pages/backtest_page.py", title="④ Backtest",  icon="📊")
 
 nav = st.navigation([pg_datos, pg_momios, pg_analisis, pg_backtest])
 
