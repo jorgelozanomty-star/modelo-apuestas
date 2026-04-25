@@ -189,7 +189,9 @@ for league_name, group in groupby(all_matches, key=lambda x: x["league"]):
             f"{'🟢' if saved.get('m_l') else '⚪'} {d_str} · **{home}** vs {away}",
             expanded=not bool(saved.get("m_l"))
         ):
-            safe_key = key.replace(" ", "_").replace("/", "_").replace(".", "_").replace("-","_")
+            # Use hash for guaranteed unique key regardless of team names
+            import hashlib
+            safe_key = hashlib.md5(key.encode()).hexdigest()[:12]
             # 1X2
             c1, c2, c3 = st.columns(3)
             m_l = c1.number_input("Local",  value=float(saved.get("m_l", 0) or 0),
