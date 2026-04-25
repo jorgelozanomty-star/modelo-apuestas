@@ -94,7 +94,10 @@ elif filtro_dia == "Jornada completa":
 
 # Pre-calcular EV para semáforo
 def quick_ev(m):
-    """EV máximo entre todos los mercados disponibles. Rápido, sin full analysis."""
+    """
+    EV máximo entre picks que pasan el filtro de probabilidad mínima.
+    Retorna (best_ev, best_prob, best_name) o None si no hay momios.
+    """
     momios = m["momios"]
     if not momios.get("m_l"):
         return None
@@ -105,26 +108,41 @@ def quick_ev(m):
         prof_v = build_team_profile(m["away"], dm, league)
         lam_l, lam_v = calc_lambdas(prof_l, prof_v, league)
         mkts = calc_all_markets(lam_l, lam_v)
-        evs = [
-            (mkts["p_l"] * momios["m_l"] - 1) * 100 if momios.get("m_l") else -99,
-            (mkts["p_e"] * momios["m_e"] - 1) * 100 if momios.get("m_e") else -99,
-            (mkts["p_v"] * momios["m_v"] - 1) * 100 if momios.get("m_v") else -99,
-        ]
+
+        candidates = []
+        if momios.get("m_l"):
+            candidates.append((mkts["p_l"], momios["m_l"], m["home"][:12]))
+        if momios.get("m_e"):
+            candidates.append((mkts["p_e"], momios["m_e"], "Empate"))
+        if momios.get("m_v"):
+            candidates.append((mkts["p_v"], momios["m_v"], m["away"][:12]))
         if momios.get("m_over"):
-            evs.append((mkts["over25"] * momios["m_over"] - 1) * 100)
+            candidates.append((mkts["over25"], momios["m_over"], "Over 2.5"))
         if momios.get("m_btts_si"):
-            evs.append((mkts["btts"] * momios["m_btts_si"] - 1) * 100)
-        return max(evs)
+            candidates.append((mkts["btts"], momios["m_btts_si"], "BTTS Sí"))
+
+        best_ev = -99; best_prob = 0; best_name = ""
+        for prob, momio, name in candidates:
+            ev = (prob * momio - 1) * 100
+            if ev > best_ev:
+                best_ev = ev; best_prob = prob * 100; best_name = name
+
+        return (best_ev, best_prob, best_name) if best_ev > -99 else None
     except:
         return None
 
 # Calcular EV para todos
 for m in all_matches:
-    m["best_ev"] = quick_ev(m)
+    result = quick_ev(m)
+    if result:
+        m["best_ev"], m["best_prob"], m["best_pick"] = result
+    else:
+        m["best_ev"] = None; m["best_prob"] = 0; m["best_pick"] = ""
 
 # Filtro valor
 if filtro_valor == "Solo con valor (EV+)":
-    all_matches = [m for m in all_matches if m.get("best_ev") is not None and m["best_ev"] > 0]
+    all_matches = [m for m in all_matches if m.get("best_ev") is not None
+                   and m["best_ev"] > 0 and m.get("best_prob", 0) >= 40.0]
 elif filtro_valor == "Solo con momios":
     all_matches = [m for m in all_matches if m["has_momios"]]
 
@@ -160,19 +178,25 @@ for league_name, group in groupby(all_matches, key=lambda x: x["league"]):
         has_mom = m["has_momios"]
         is_active = key == active_key
 
-        # Semáforo
+        prob  = m.get("best_prob", 0)
+        pick_name = m.get("best_pick", "")
+        min_prob = 40.0  # filtro de probabilidad mínima
+
+        # Semáforo — verde solo si EV+ AND prob >= 40%
         if not has_mom:
             dot = "⚪"; dot_color = "#a8a29e"
         elif ev is None:
             dot = "🔵"; dot_color = "#0891b2"
-        elif ev > 3:
-            dot = "🟢"; dot_color = "#16a34a"
-        elif ev > 0:
-            dot = "🟡"; dot_color = "#d97706"
+        elif ev > 0 and prob >= min_prob:
+            dot = "🟢"; dot_color = "#16a34a"   # valor real: EV+ y prob >= 40%
+        elif ev > 0 and prob < min_prob:
+            dot = "🟡"; dot_color = "#d97706"   # EV+ pero prob baja
+        elif ev > -5:
+            dot = "🟠"; dot_color = "#ea580c"   # EV negativo pequeño
         else:
-            dot = "🔴"; dot_color = "#dc2626"
+            dot = "🔴"; dot_color = "#dc2626"   # sin valor
 
-        ev_txt = f"EV: {ev:+.1f}%" if ev is not None else "sin EV"
+        ev_txt = f"EV: {ev:+.1f}% · {prob:.0f}% ({pick_name})" if ev is not None else "sin EV"
         d_str  = f"{m['date'].strftime('%d/%m')} {m['time']}"
 
         border = "#4f46e5" if is_active else "#e7e5e0"
