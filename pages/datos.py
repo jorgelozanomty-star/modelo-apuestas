@@ -103,6 +103,44 @@ for i, (nombre, icon) in enumerate(TABLES):
                 else:
                     st.warning("No se pudo parsear. Revisa el formato.")
 
+# ── Tabla Home / Away ─────────────────────────────────────────────────────────
+st.markdown('<div class="sec-label">Tabla Home / Away (opcional)</div>', unsafe_allow_html=True)
+
+ha_store = get_ha_store(league)
+ha_loaded = len(ha_store) > 0
+
+if ha_loaded:
+    st.markdown(
+        f'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;'
+        f'padding:10px 16px;margin-bottom:8px;">'
+        f'<span style="font-size:0.8rem;font-weight:600;color:#1c1917;">✓ Home/Away splits: {len(ha_store)} equipos</span><br>'
+        f'<span style="font-size:0.7rem;font-family:DM Mono,monospace;color:#15803d;">el modelo usa goles reales por condición</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+with st.expander("🏠✈️ Cargar tabla Home / Away"):
+    st.caption("Copia la tabla de clasificación por Home/Away de FBRef (misma página que Tabla General, pestaña 'Home and Away').")
+    raw_ha = st.text_area(
+        "", key=f"ha_{league}", height=120,
+        label_visibility="collapsed",
+        placeholder="Pega aquí la tabla Home / Away de FBRef…",
+    )
+    if raw_ha and len(raw_ha) > 20:
+        ha_data = parse_home_away_table(raw_ha)
+        if ha_data and len(ha_data) > 0:
+            set_ha_store(league, ha_data)
+            st.success(f"✓ {len(ha_data)} equipos con splits Home/Away")
+            # Preview
+            import pandas as pd
+            rows = [{"Equipo": k,
+                     "GF/p Casa": v["gf_home_pg"], "GA/p Casa": v["ga_home_pg"],
+                     "GF/p Visita": v["gf_away_pg"], "GA/p Visita": v["ga_away_pg"]}
+                    for k, v in ha_data.items()]
+            st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+        else:
+            st.warning("No se pudo parsear. Asegúrate de copiar toda la tabla incluyendo los números.")
+
 # ── Fixtures ───────────────────────────────────────────────────────────────────
 st.markdown('<div class="sec-label">Scores & Fixtures</div>', unsafe_allow_html=True)
 

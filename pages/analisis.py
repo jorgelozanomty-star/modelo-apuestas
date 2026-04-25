@@ -8,7 +8,7 @@ Click → análisis completo precargado.
 import streamlit as st
 from datetime import date, timedelta
 
-from data.session   import init, get_all_pending_matches, get_momios, get_data_master, get_fixtures
+from data.session   import init, get_all_pending_matches, get_momios, get_data_master, get_fixtures, get_ha_store
 from data.profile   import build_team_profile, calc_lambdas, blend_label
 from data.leagues   import LEAGUES, LEAGUE_NAMES
 from data.fixtures  import get_current_gameweek, get_gameweek_matches, parse_h2h, h2h_lambda_adjustment
@@ -106,7 +106,8 @@ def quick_ev(m):
     try:
         prof_l = build_team_profile(m["home"], dm, league)
         prof_v = build_team_profile(m["away"], dm, league)
-        lam_l, lam_v = calc_lambdas(prof_l, prof_v, league)
+        ha = get_ha_store(league)
+        lam_l, lam_v = calc_lambdas(prof_l, prof_v, league, ha_store=ha or None)
         mkts = calc_all_markets(lam_l, lam_v)
 
         candidates = []
@@ -273,7 +274,8 @@ kelly_fraction = 0.25
 try:
     prof_l = build_team_profile(local,  dm, league)
     prof_v = build_team_profile(visita, dm, league)
-    lam_l, lam_v = calc_lambdas(prof_l, prof_v, league)
+    ha_splits = get_ha_store(league) or None
+    lam_l, lam_v = calc_lambdas(prof_l, prof_v, league, ha_store=ha_splits)
 
     # Ajuste H2H si disponible
     h2h_store = st.session_state.get("h2h_store", {})

@@ -29,6 +29,8 @@ DEFAULTS = {
     "momios_store":        {},
     # H2H — dict {"Local_Visita": {...}}
     "h2h_store":           {},
+    # Home/Away splits — dict {league: {squad: {home:{...}, away:{...}}}}
+    "ha_store":            {},
     # UI state
     "selected_home":       None,
     "selected_away":       None,
@@ -192,6 +194,18 @@ def set_momios(match_key: str, momios: dict):
     if "momios_store" not in st.session_state:
         st.session_state["momios_store"] = {}
     st.session_state["momios_store"][match_key] = momios
+
+
+def get_ha_store(league: str) -> dict:
+    """Retorna el dict Home/Away splits para una liga."""
+    return st.session_state.get("ha_store", {}).get(league, {})
+
+
+def set_ha_store(league: str, ha: dict):
+    """Guarda el Home/Away store para una liga."""
+    if "ha_store" not in st.session_state:
+        st.session_state["ha_store"] = {}
+    st.session_state["ha_store"][league] = ha
 
 
 def get_all_leagues_with_data() -> list[str]:

@@ -194,14 +194,31 @@ def build_team_profile(squad_name: str, data_master: dict,
     return p
 
 
-def calc_lambdas(prof_l: dict, prof_v: dict, league_name: str) -> tuple[float, float]:
+def calc_lambdas(prof_l: dict, prof_v: dict, league_name: str,
+                 ha_store: dict = None) -> tuple[float, float]:
     """
     Calcula los lambdas finales para el partido.
+    Si ha_store tiene splits Home/Away, ajusta con goles reales por condición.
     λ_l = (att_local + def_visita) / 2 + home_adv
     λ_v = (att_visita + def_local) / 2
     """
     raw_l = max(0.10, (prof_l["lambda_att"] + prof_v["lambda_def"]) / 2.0)
     raw_v = max(0.10, (prof_v["lambda_att"] + prof_l["lambda_def"]) / 2.0)
+
+    # Si hay splits HA disponibles, blend 50/50 con datos reales por condición
+    if ha_store:
+        name_l = prof_l.get("name", "")
+        name_v = prof_v.get("name", "")
+        ha_l = ha_store.get(name_l)
+        ha_v = ha_store.get(name_v)
+        if ha_l and ha_v:
+            # Ataque local real: goles marcados en casa vs goles recibidos de visita del rival
+            atk_l = (ha_l["gf_home_pg"] + ha_v["ga_away_pg"]) / 2
+            # Ataque visitante real: goles marcados de visita vs goles recibidos en casa del rival
+            atk_v = (ha_v["gf_away_pg"] + ha_l["ga_home_pg"]) / 2
+            raw_l = max(0.10, (raw_l + atk_l) / 2)
+            raw_v = max(0.10, (raw_v + atk_v) / 2)
+
     lam_l, lam_v = apply_home_advantage(raw_l, raw_v, league_name)
     return lam_l, lam_v
 
