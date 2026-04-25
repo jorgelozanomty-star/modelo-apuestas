@@ -9,8 +9,69 @@ from datetime import date
 
 from data.session  import init, get_data_master, get_fixtures
 from data.leagues  import LEAGUES, LEAGUE_NAMES
-from backtest      import ejecutar_backtest, csv_to_df
+from backtest      import ejecutar_backtest, csv_to_df, _resultado_real
+from data.profile  import build_team_profile, calc_lambdas
+from core.poisson  import calc_all_markets
 from ui.styles     import inject_css
+
+
+def _calibracion_backtest(df, dm, league):
+    '''Evalúa calibración del modelo sin momios: predicciones vs resultados reales.'''
+    historial = []
+    correcto = 0
+    total = 0
+    for _, row in df.iterrows():
+        home  = str(row.get("home","")).strip()
+        away  = str(row.get("away","")).strip()
+        score = str(row.get("score","")).strip()
+        if not home or not away or "-" not in score:
+            continue
+        try:
+            gf, ga = map(int, score.split("-"))
+            real = _resultado_real(gf, ga)
+            pf_l = build_team_profile(home, dm, league)
+            pf_v = build_team_profile(away, dm, league)
+            ll, lv = calc_lambdas(pf_l, pf_v, league)
+            mkts = calc_all_markets(ll, lv)
+            # Predicción: resultado con mayor probabilidad
+            probs = {"local": mkts["p_l"], "empate": mkts["p_e"], "visita": mkts["p_v"]}
+            pred  = max(probs, key=probs.get)
+            ok    = (pred == real)
+            if ok: correcto += 1
+            total += 1
+            historial.append({
+                "fecha":      str(row.get("date","")),
+                "partido":    home + " vs " + away,
+                "score":      score,
+                "mercado":    "1X2",
+                "pick":       pred,
+                "momio":      0.0,
+                "prob_modelo": round(probs[pred]*100,1),
+                "ev":         0.0,
+                "edge":       0.0,
+                "stake_pct":  0.0,
+                "monto":      0.0,
+                "resultado":  real,
+                "ganado":     ok,
+                "ganancia":   0.0,
+                "bankroll":   0.0,
+                "lambda_l":   round(ll,3),
+                "lambda_v":   round(lv,3),
+            })
+        except Exception:
+            continue
+
+    tasa = round(correcto/total*100,1) if total>0 else 0
+    metricas = {
+        "bankroll_inicial": 0, "bankroll_final": 0, "beneficio": 0,
+        "roi": 0.0, "yield": 0.0,
+        "total_apuestas": total, "ganadas": correcto,
+        "perdidas": total - correcto, "tasa_acierto": tasa,
+        "total_expuesto": 0, "max_drawdown": 0,
+        "errores": [],
+        "_modo": "calibracion",
+    }
+    return metricas, historial, [0.0]
 
 init()
 inject_css()
@@ -85,18 +146,15 @@ if fuente == "Fixtures cargados (solo resultados jugados)":
         st.warning("No hay partidos con resultado en los fixtures.")
         st.stop()
 
-    # Sin momios históricos — solo validar las lambdas vs resultados reales
-    # Usamos momios neutros (no hay edge calculable) — el backtest muestra calibración del modelo
     df_bt = jugados[["date", "home", "away", "score"]].copy()
+    for col in ["m_l","m_e","m_v","m_over","m_under","m_btts_si","m_btts_no"]:
+        df_bt[col] = 0.0
+
     st.info(
-        "⚠️ Sin momios históricos: el backtest solo valida la **calibración del modelo** "
-        "(¿coinciden las probabilidades predichas con los resultados reales?). "
-        "Para calcular ROI real sube un CSV con los momios de la casa."
+        f"📊 **{len(jugados)} partidos jugados** disponibles para calibración. "
+        "Sin momios históricos el backtest muestra si el modelo predice bien los resultados reales. "
+        "Para calcular ROI y yield real sube un CSV con los momios de la casa."
     )
-    # Agregar momios neutros para que el backtest corra
-    df_bt["m_l"] = 0.0
-    df_bt["m_e"] = 0.0
-    df_bt["m_v"] = 0.0
     st.dataframe(df_bt[["date","home","away","score"]].head(10), hide_index=True)
 
 else:
@@ -135,18 +193,22 @@ if df_bt is not None:
         has_momios = df_bt.get("m_l", pd.Series([0])).max() > 1
 
         with st.spinner("Corriendo simulación…"):
-            metricas, historial, evolucion = ejecutar_backtest(
-                df=df_bt,
-                data_master=dm,
-                league=league,
-                bankroll_inicial=bankroll_ini,
-                kelly_frac=kelly_frac,
-                min_ev=min_ev if has_momios else -999,
-                min_prob=min_prob if has_momios else 0,
-                min_edge=min_edge if has_momios else 0,
-                linea_ou=linea_ou,
-                mercados=mercados_sel if has_momios else ["1x2"],
-            )
+            if has_momios:
+                metricas, historial, evolucion = ejecutar_backtest(
+                    df=df_bt,
+                    data_master=dm,
+                    league=league,
+                    bankroll_inicial=bankroll_ini,
+                    kelly_frac=kelly_frac,
+                    min_ev=min_ev,
+                    min_prob=min_prob,
+                    min_edge=min_edge,
+                    linea_ou=linea_ou,
+                    mercados=mercados_sel,
+                )
+            else:
+                # Modo calibración — sin momios, evaluar predicciones vs resultados reales
+                metricas, historial, evolucion = _calibracion_backtest(df_bt, dm, league)
 
         # ── Resultados ─────────────────────────────────────────────────────────
         st.markdown('<div class="sec-label">Resultados</div>', unsafe_allow_html=True)
@@ -157,7 +219,25 @@ if df_bt is not None:
                     st.caption(e)
 
         if not historial:
-            st.warning("Ningún partido pasó los filtros con los parámetros actuales. Prueba reduciendo EV mínimo o Edge mínimo.")
+            st.warning("Ningún partido pudo analizarse. Verifica que los nombres de equipos coincidan con las tablas FBRef cargadas.")
+            st.stop()
+
+        # Modo calibración — mostrar métricas especiales
+        if metricas.get("_modo") == "calibracion":
+            st.markdown('<div class="sec-label">Calibración del modelo (sin momios)</div>', unsafe_allow_html=True)
+            ca, cb, cc = st.columns(3)
+            ca.metric("Partidos analizados", metricas["total_apuestas"])
+            cb.metric("Predicciones correctas", metricas["ganadas"])
+            cc.metric("Tasa de acierto", str(metricas["tasa_acierto"]) + "%")
+            if metricas["tasa_acierto"] >= 45:
+                st.success("Modelo bien calibrado — supera el 45% de acierto esperado por azar en 1X2.")
+            else:
+                st.warning("Calibración mejorable. El modelo predice el resultado más probable — no siempre coincide con el real.")
+            st.caption("Para calcular ROI y yield real sube un CSV con los momios históricos de la casa.")
+            df_hist = pd.DataFrame(historial)
+            df_hist["✓"] = df_hist["ganado"].map({True: "✓", False: "✗"})
+            st.dataframe(df_hist[["fecha","partido","score","pick","prob_modelo","resultado","✓"]],
+                         hide_index=True, use_container_width=True)
             st.stop()
 
         # KPIs
