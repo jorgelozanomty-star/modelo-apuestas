@@ -10,6 +10,7 @@ from datetime import date
 from data.session  import init, get_data_master, get_fixtures
 from data.leagues  import LEAGUES, LEAGUE_NAMES
 from backtest      import ejecutar_backtest, csv_to_df, _resultado_real
+from data.parser   import EQUIPOS_MAP as _EMAP
 from data.profile  import build_team_profile, calc_lambdas
 from core.poisson  import calc_all_markets
 from ui.styles     import inject_css
@@ -159,33 +160,121 @@ if fuente == "Fixtures cargados (solo resultados jugados)":
 
 else:
     st.markdown("""
-    **Formato del CSV requerido:**
-    ```
-    date,home,away,score,m_l,m_e,m_v,m_over,m_under,m_btts_si,m_btts_no
-    2025-08-15,Liverpool,Bournemouth,4-2,1.40,5.00,7.00,1.55,2.35,1.74,2.05
-    ```
-    - `score` = resultado jugado en formato **GF-GA** (ej. `2-1`)
-    - Momios decimales de la casa en el momento previo al partido
+    Acepta dos formatos:
+    - **football-data.co.uk** — descarga `E0.csv`, `D1.csv`, `SP1.csv`, `I1.csv`, `MEX.csv` sin modificar
+    - **Formato propio** — columnas: `date, home, away, score, m_l, m_e, m_v`
     """)
 
     uploaded = st.file_uploader("Subir CSV", type=["csv"], key="bt_csv")
     if uploaded:
-        text = uploaded.read().decode("utf-8")
-        df_bt = csv_to_df(text)
-        if df_bt is None:
-            st.error("No se pudo leer el CSV. Verifica el formato.")
-            st.stop()
-        # Validar columnas mínimas
-        missing = [c for c in ["date","home","away","score"] if c not in df_bt.columns]
-        if missing:
-            st.error(f"Faltan columnas: {missing}")
-            st.stop()
-        # Agregar momios en 0 si no vienen
-        for col in ["m_l","m_e","m_v","m_over","m_under","m_btts_si","m_btts_no"]:
-            if col not in df_bt.columns:
-                df_bt[col] = 0.0
-        st.success(f"✓ {len(df_bt)} partidos cargados")
-        st.dataframe(df_bt[["date","home","away","score","m_l","m_e","m_v"]].head(10), hide_index=True)
+        try:
+            raw = uploaded.read()
+            # Try utf-8-sig first (football-data has BOM)
+            try:
+                text = raw.decode("utf-8-sig")
+            except Exception:
+                text = raw.decode("latin-1")
+
+            import io
+            raw_df = pd.read_csv(io.StringIO(text))
+            raw_df.columns = [c.strip() for c in raw_df.columns]
+            cols = set(raw_df.columns)
+
+            # ── Detectar formato football-data.co.uk ─────────────────────────
+            is_fdco = "HomeTeam" in cols or "Home" in cols and "AvgCH" in cols
+
+            if is_fdco:
+                st.info("Formato football-data.co.uk detectado — convirtiendo automáticamente…")
+
+                # Columnas de equipo
+                home_col = "HomeTeam" if "HomeTeam" in cols else "Home"
+                away_col = "AwayTeam" if "AwayTeam" in cols else "Away"
+                # Goles
+                hg_col = "FTHG" if "FTHG" in cols else "HG"
+                ag_col = "FTAG" if "FTAG" in cols else "AG"
+                # Momios — preferir Avg > PS > B365
+                def _pick(candidates):
+                    for c in candidates:
+                        if c in cols: return c
+                    return None
+                ml_col  = _pick(["AvgCH","PSCH","B365H","B365CH","MaxCH"])
+                me_col  = _pick(["AvgCD","PSCD","B365D","B365CD","MaxCD"])
+                mv_col  = _pick(["AvgCA","PSCA","B365A","B365CA","MaxCA"])
+                ov_col  = _pick(["Avg>2.5","AvgC>2.5","B365>2.5","B365C>2.5","Max>2.5"])
+                un_col  = _pick(["Avg<2.5","AvgC<2.5","B365<2.5","B365C<2.5","Max<2.5"])
+
+                def _parse_date(d):
+                    try: return pd.to_datetime(d, dayfirst=True).strftime("%Y-%m-%d")
+                    except: return str(d)
+
+                def _norm(n):
+                    n = str(n).strip()
+                    return _EMAP.get(n, n)
+
+                extra_map = {
+                    # Premier League
+                    "Man United":"Man United","Manchester United":"Man United",
+                    "Man City":"Man City","Manchester City":"Man City",
+                    "Newcastle":"Newcastle","Tottenham":"Tottenham Hotspur",
+                    "Nott'm Forest":"Nottm Forest","West Ham":"West Ham",
+                    "Leeds":"Leeds United","Leicester":"Leicester City",
+                    # Liga MX
+                    "Club America":"América","Atl. San Luis":"San Luis",
+                    "Mazatlan FC":"Mazatlán","Queretaro":"Querétaro",
+                    "UNAM Pumas":"Pumas","Club Tijuana":"Xolos",
+                    "Club Leon":"León","Guadalajara":"Chivas",
+                    # Bundesliga
+                    "Dortmund":"Borussia Dortmund","Bayern Munich":"Bayern München",
+                    "Ein Frankfurt":"Eintracht Frankfurt","Leverkusen":"Bayer Leverkusen",
+                    "M'gladbach":"Borussia Mönchengladbach","Hertha":"Hertha Berlin",
+                    # La Liga
+                    "Ath Bilbao":"Athletic Bilbao","Ath Madrid":"Atletico Madrid",
+                    "Betis":"Real Betis","Celta":"Celta Vigo","Espanol":"Espanyol",
+                    "Sociedad":"Real Sociedad","Vallecano":"Rayo Vallecano",
+                    # Serie A
+                    "Hellas Verona":"Verona","Inter":"Inter","AC Milan":"Milan",
+                    "Lazio":"Lazio","Juventus":"Juventus",
+                }
+
+                valid = raw_df.dropna(subset=[home_col, away_col, hg_col, ag_col])
+                df_bt = pd.DataFrame({
+                    "date":  valid["Date"].apply(_parse_date),
+                    "home":  valid[home_col].apply(lambda x: extra_map.get(_norm(x), _norm(x))),
+                    "away":  valid[away_col].apply(lambda x: extra_map.get(_norm(x), _norm(x))),
+                    "score": valid[hg_col].astype(int).astype(str) + "-" + valid[ag_col].astype(int).astype(str),
+                    "m_l":   pd.to_numeric(valid[ml_col],  errors="coerce").fillna(0).round(2) if ml_col  else 0.0,
+                    "m_e":   pd.to_numeric(valid[me_col],  errors="coerce").fillna(0).round(2) if me_col  else 0.0,
+                    "m_v":   pd.to_numeric(valid[mv_col],  errors="coerce").fillna(0).round(2) if mv_col  else 0.0,
+                    "m_over":  pd.to_numeric(valid[ov_col], errors="coerce").fillna(0).round(2) if ov_col else 0.0,
+                    "m_under": pd.to_numeric(valid[un_col], errors="coerce").fillna(0).round(2) if un_col else 0.0,
+                    "m_btts_si": 0.0,
+                    "m_btts_no": 0.0,
+                })
+                df_bt = df_bt[df_bt["m_l"] > 1].reset_index(drop=True)
+                st.success(f"✓ {len(df_bt)} partidos convertidos desde football-data.co.uk")
+
+            else:
+                # ── Formato propio ────────────────────────────────────────────
+                df_bt = csv_to_df(text)
+                if df_bt is None:
+                    st.error("No se pudo leer el CSV.")
+                    st.stop()
+                missing = [c for c in ["date","home","away","score"] if c not in df_bt.columns]
+                if missing:
+                    st.error(f"Faltan columnas: {missing}")
+                    st.stop()
+                for col in ["m_l","m_e","m_v","m_over","m_under","m_btts_si","m_btts_no"]:
+                    if col not in df_bt.columns:
+                        df_bt[col] = 0.0
+                st.success(f"✓ {len(df_bt)} partidos cargados")
+
+            st.dataframe(
+                df_bt[["date","home","away","score","m_l","m_e","m_v"]].head(10),
+                hide_index=True,
+            )
+
+        except Exception as e:
+            st.error(f"Error al procesar CSV: {e}")
 
 # ── Ejecutar ───────────────────────────────────────────────────────────────────
 if df_bt is not None:
