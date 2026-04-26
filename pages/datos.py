@@ -11,7 +11,7 @@ from ui.components import (
     liga_status_card, inline_tip, toast, auto_save_indicator,
     mark_modified, safe_key, TABLA_NOMBRES
 )
-from data.leagues import LIGAS
+from data.leagues import LEAGUES, LEAGUE_NAMES
 from data import parser, fixtures as fixtures_mod, session
 
 
