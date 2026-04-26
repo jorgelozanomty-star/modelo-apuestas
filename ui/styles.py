@@ -676,3 +676,8 @@ def inject_styles():
     import streamlit as st
     st.markdown(FONTS_URL, unsafe_allow_html=True)
     st.markdown(CSS, unsafe_allow_html=True)
+
+
+# Alias para compatibilidad con backtest_page.py y código legacy
+inject_css = inject_styles
+
