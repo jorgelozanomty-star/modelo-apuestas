@@ -384,3 +384,5 @@ def _find_liga_key(home: str, away: str, fixtures_data: dict) -> str:
                     or p.get("away", "").lower() == away.lower()):
                 return liga_key
     return ""
+
+render()
