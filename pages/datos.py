@@ -325,16 +325,27 @@ def _tab(liga_key: str):
 
     if fixtures_liga is not None and len(fixtures_liga) > 0:
         with st.expander("👁 Próximos partidos"):
-            proximos = [p for p in fixtures_liga if not p.get("jugado", True)][:8]
-            if proximos:
-                import pandas as pd
-                df_cols = [c for c in ["fecha", "home", "away", "hora"]
-                           if c in pd.DataFrame(proximos).columns]
-                st.dataframe(
-                    pd.DataFrame(proximos)[df_cols],
-                    use_container_width=True,
-                    hide_index=True
-                )
+            import pandas as pd
+            # fixtures_liga puede ser DataFrame o lista de dicts
+            if isinstance(fixtures_liga, pd.DataFrame):
+                df_fix = fixtures_liga.copy()
+            else:
+                df_fix = pd.DataFrame(fixtures_liga)
+
+            # Filtrar no jugados: si hay col Score, jugados tienen score real
+            if "Score" in df_fix.columns:
+                proximos_df = df_fix[df_fix["Score"].isna() | (df_fix["Score"] == "")]
+            elif "jugado" in df_fix.columns:
+                proximos_df = df_fix[~df_fix["jugado"].astype(bool)]
+            else:
+                proximos_df = df_fix  # mostrar todos si no se puede filtrar
+
+            proximos_df = proximos_df.head(8)
+            if len(proximos_df) > 0:
+                show_cols = [c for c in ["Date", "fecha", "Home", "home", "Away", "away", "Time", "hora"]
+                             if c in proximos_df.columns]
+                st.dataframe(proximos_df[show_cols] if show_cols else proximos_df,
+                             use_container_width=True, hide_index=True)
             else:
                 st.caption("Sin próximos partidos.")
 
