@@ -13,7 +13,7 @@ from ui.components import (
     fuzzy_confirm_block, momios_inline_editor, inline_tip,
     toast, auto_save_indicator, mark_modified, safe_key
 )
-from data.leagues import LIGAS
+from data.leagues import LEAGUES, LEAGUE_NAMES
 
 
 # ── Conversión de momios ───────────────────────────────────────────────────────
