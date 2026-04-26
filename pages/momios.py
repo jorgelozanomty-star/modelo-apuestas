@@ -88,35 +88,40 @@ def _all_partidos():
     for liga_key, lp in st.session_state.get("fixtures_data", {}).items():
         if lp is None or (hasattr(lp, "__len__") and len(lp) == 0):
             continue
-        # lp puede ser DataFrame o lista de dicts
         if isinstance(lp, pd.DataFrame):
             df = lp.copy()
-            # Partidos sin score = futuros
-            if "Score" in df.columns:
+            # parse_fixtures usa columnas lowercase: played, score
+            if "played" in df.columns:
+                df = df[df["played"] == False]
+            elif "score" in df.columns:
+                df = df[df["score"].isna() | (df["score"].astype(str).str.strip() == "")]
+            elif "Score" in df.columns:
                 df = df[df["Score"].isna() | (df["Score"].astype(str).str.strip() == "")]
             for _, row in df.iterrows():
-                def _rget(row, *keys, default=""):
-                    for k in keys:
-                        v = row.get(k, None)
-                        if v is not None and str(v).strip() not in ("", "nan", "NaT"):
-                            return v
-                    return default
+                raw_date = (row.get("date") or row.get("Date") or
+                            row.get("fecha") or "")
+                if hasattr(raw_date, "strftime"):
+                    fecha_str = raw_date.strftime("%Y-%m-%d")
+                else:
+                    fecha_str = str(raw_date)[:10] if raw_date else ""
+                home = str(row.get("home") or row.get("Home") or "").strip()
+                away = str(row.get("away") or row.get("Away") or "").strip()
+                if not home or not away or home == away:
+                    continue
                 partidos.append({
-                    "home":  _rget(row, "Home", "home"),
-                    "away":  _rget(row, "Away", "away"),
-                    "fecha": _rget(row, "Date", "date", "fecha", "Fecha"),
-                    "hora":  _rget(row, "Time", "time", "hora"),
-                    "liga":  liga_key,
-                    "liga_key": liga_key,
+                    "home": home, "away": away, "fecha": fecha_str,
+                    "hora": str(row.get("time") or row.get("Time") or ""),
+                    "liga": liga_key, "liga_key": liga_key,
                 })
         else:
             for p in lp:
-                if not p.get("jugado", False):
-                    partidos.append({**p, "liga": liga_key, "liga_key": liga_key})
+                if not p.get("jugado", False) and not p.get("played", False):
+                    home = str(p.get("home") or "").strip()
+                    away = str(p.get("away") or "").strip()
+                    if home and away:
+                        partidos.append({**p, "home": home, "away": away,
+                                         "liga": liga_key, "liga_key": liga_key})
     return partidos
-
-
-# ── Render ─────────────────────────────────────────────────────
 
 def render():
     inject_styles()
