@@ -129,7 +129,7 @@ def render():
     any_loaded = False
     for liga_key in LEAGUE_NAMES:
         tablas = fbref_data.get(liga_key, {})
-        if tablas:
+        if tablas is not None and len(tablas) > 0:
             any_loaded = True
             n = len(tablas)
             total = len(TABLA_NOMBRES)
@@ -148,7 +148,7 @@ def _tab(liga_key: str):
     ss = st.session_state
     tablas = ss.get("fbref_data", {}).get(liga_key, {})
 
-    if tablas:
+    if tablas is not None and len(tablas) > 0:
         n = len(tablas)
         st.success(f"✅ {liga_key}: {n} tablas cargadas — " +
                    ", ".join(TABLA_NOMBRES.get(k, k) for k in tablas if k != "ha"))
@@ -196,7 +196,7 @@ def _tab(liga_key: str):
             st.rerun()
 
     with c2:
-        if tablas and st.button("🗑 Limpiar", key=safe_key("btn_reset", liga_key),
+        if (tablas is not None and len(tablas) > 0) and st.button("🗑 Limpiar", key=safe_key("btn_reset", liga_key),
                                 use_container_width=True):
             ss.get("fbref_data", {}).pop(liga_key, None)
             mark_modified()
@@ -250,7 +250,7 @@ def _tab(liga_key: str):
 
     section_header("🏠 Tabla Casa / Visitante (opcional pero mejora el modelo)")
 
-    if ha_liga:
+    if ha_liga is not None and len(ha_liga) > 0:
         st.success(f"✅ Home/Away cargado — {len(ha_liga)} equipos")
     else:
         st.info("Mejora la precisión del modelo con splits reales por condición de juego.")
@@ -278,7 +278,7 @@ def _tab(liga_key: str):
             except Exception as e:
                 st.error(f"❌ {e}")
     with ch2:
-        if ha_liga and st.button("🗑 Limpiar", key=safe_key("btn_ha_reset", liga_key),
+        if (ha_liga is not None and len(ha_liga) > 0) and st.button("🗑 Limpiar", key=safe_key("btn_ha_reset", liga_key),
                                  use_container_width=True):
             ss.get("ha_store", {}).pop(liga_key, None)
             mark_modified()
@@ -290,7 +290,7 @@ def _tab(liga_key: str):
     section_header("📅 Fixtures de la temporada")
     fixtures_data = ss.get("fixtures_data", {})
     fixtures_liga = fixtures_data.get(liga_key)
-    n_fix = len(fixtures_liga) if fixtures_liga else 0
+    n_fix = len(fixtures_liga) if fixtures_liga is not None and len(fixtures_liga) > 0 else 0
 
     if n_fix:
         st.success(f"✅ {n_fix} partidos en fixtures")
@@ -317,13 +317,13 @@ def _tab(liga_key: str):
             except Exception as e:
                 st.error(f"❌ {e}")
     with cf2:
-        if fixtures_liga and st.button("🗑 Limpiar", key=safe_key("btn_fix_reset", liga_key),
+        if (fixtures_liga is not None and len(fixtures_liga) > 0) and st.button("🗑 Limpiar", key=safe_key("btn_fix_reset", liga_key),
                                        use_container_width=True):
             ss.get("fixtures_data", {}).pop(liga_key, None)
             mark_modified()
             st.rerun()
 
-    if fixtures_liga:
+    if fixtures_liga is not None and len(fixtures_liga) > 0:
         with st.expander("👁 Próximos partidos"):
             proximos = [p for p in fixtures_liga if not p.get("jugado", True)][:8]
             if proximos:
