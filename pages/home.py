@@ -36,8 +36,8 @@ def render():
     fixtures_data = ss.get("fixtures_data", {})
     momios_data  = ss.get("momios_data", {})
 
-    n_ligas    = sum(1 for v in fbref_data.values() if v)
-    n_fixtures = sum(len(v) for v in fixtures_data.values() if v)
+    n_ligas    = sum(1 for v in fbref_data.values() if v is not None and len(v) > 0)
+    n_fixtures = sum(len(v) for v in fixtures_data.values() if v is not None and len(v) > 0)
     n_momios   = sum(
         1 for lp in momios_data.values()
         for p in (lp.values() if isinstance(lp, dict) else []) if p

@@ -180,7 +180,7 @@ def render():
     momios_data   = ss.get("momios_data", {})
     fixtures_data = ss.get("fixtures_data", {})
 
-    if not any(v for v in fbref_data.values()):
+    if not any(v is not None and len(v) > 0 for v in fbref_data.values()):
         st.info("Carga datos en **① Cargar Ligas** primero.")
         return
     if not momios_data:
@@ -189,7 +189,7 @@ def render():
 
     # ── Filtros ──────────────────────────────────────────────────
     cf1, cf2, cf3 = st.columns([2, 2, 1])
-    ligas_con_datos = [k for k, v in fbref_data.items() if v]
+    ligas_con_datos = [k for k, v in fbref_data.items() if v is not None and len(v) > 0]
     with cf1:
         liga_filtro = st.selectbox("Liga", ["Todas"] + ligas_con_datos, key="an_liga")
     with cf2:
