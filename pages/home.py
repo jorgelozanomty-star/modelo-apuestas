@@ -8,7 +8,7 @@ from ui.components import (
     bankroll_sidebar, pipeline_steps, next_action_cta,
     auto_save_indicator, section_header, safe_key
 )
-from data.leagues import LIGAS
+from data.leagues import LEAGUES, LEAGUE_NAMES
 
 
 def render():
