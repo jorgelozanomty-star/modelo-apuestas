@@ -95,7 +95,7 @@ def render():
         st.divider()
         auto_save_indicator()
 
-    st.markdown('<h1>💰 Momios</h1>', unsafe_allow_html=True)
+    st.markdown(('<h1>💰 Momios</h1>').strip(), unsafe_allow_html=True)
     pipeline_steps()
 
     ss = st.session_state
@@ -164,7 +164,7 @@ def _inline(todos, momios_data):
 
     editados = momios_inline_editor(filtrados)
 
-    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown(("<br>").strip(), unsafe_allow_html=True)
     if st.button("💾 Guardar momios", use_container_width=True, key="btn_save_inline"):
         guardados = 0
         for pk, vals in editados.items():
@@ -219,7 +219,7 @@ def _json_loader(todos, momios_data):
 
     confirmaciones = {}
     if pending:
-        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown(("<br>").strip(), unsafe_allow_html=True)
         confirmaciones = fuzzy_confirm_block(pending)
         n_pend = len([f for f in pending if f["json_name"] not in confirmaciones])
         if n_pend:
@@ -240,7 +240,7 @@ def _json_loader(todos, momios_data):
                      "Visit.": m.get("away", "—")})
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
-    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown(("<br>").strip(), unsafe_allow_html=True)
     if st.button("✅ Confirmar y cargar", use_container_width=True, key="btn_load_json"):
         cargados = 0
         for p in partidos_json:

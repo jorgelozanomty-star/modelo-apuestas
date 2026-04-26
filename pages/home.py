@@ -57,7 +57,7 @@ def render():
             unsafe_allow_html=True,
         )
 
-    st.markdown("<hr>", unsafe_allow_html=True)
+    st.markdown(("<hr>").strip(), unsafe_allow_html=True)
 
     if picks:
         section_header("🎯 Picks de esta jornada", len(picks))
@@ -103,7 +103,7 @@ def render():
     historial = ss.get("historial", [])
     recientes = [b for b in historial if b.get("resultado") is not None][-5:]
     if recientes:
-        st.markdown("<hr>", unsafe_allow_html=True)
+        st.markdown(("<hr>").strip(), unsafe_allow_html=True)
         section_header("📈 Últimas 5 apuestas")
         ganadas = sum(1 for b in recientes if b.get("resultado") == "ganada")
         profit  = sum(b.get("ganancia", 0) for b in recientes)

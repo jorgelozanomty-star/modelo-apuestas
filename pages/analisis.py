@@ -173,7 +173,7 @@ def render():
         auto_save_indicator()
 
     # ── Header ───────────────────────────────────────────────────
-    st.markdown('<h1>🎯 Análisis de valor</h1>', unsafe_allow_html=True)
+    st.markdown(('<h1>🎯 Análisis de valor</h1>').strip(), unsafe_allow_html=True)
     pipeline_steps()
 
     fbref_data    = ss.get("fbref_data", {})
@@ -246,7 +246,7 @@ def render():
     cs2.metric("🟢 Con valor",     n_verde)
     cs3.metric("🟡 EV+ prob baja", sum(1 for r in resultados if r["mejor_signal"] == "amber"))
 
-    st.markdown("<hr>", unsafe_allow_html=True)
+    st.markdown(("<hr>").strip(), unsafe_allow_html=True)
     section_header("Partidos", len(resultados))
 
     for r in resultados:
@@ -295,7 +295,7 @@ def _card(r: dict, ss: dict):
     with st.expander(f"Análisis completo — {home} vs {away}"):
         _analisis_expandido(r, ss)
 
-    st.markdown('<hr style="margin:6px 0">', unsafe_allow_html=True)
+    st.markdown(('<hr style="margin:6px 0">').strip(), unsafe_allow_html=True)
 
 
 def _analisis_expandido(r: dict, ss: dict):

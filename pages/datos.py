@@ -72,7 +72,7 @@ def render():
         st.divider()
         auto_save_indicator()
 
-    st.markdown('<h1>📋 Cargar Ligas</h1>', unsafe_allow_html=True)
+    st.markdown(('<h1>📋 Cargar Ligas</h1>').strip(), unsafe_allow_html=True)
     pipeline_steps()
 
     ss = st.session_state
@@ -106,7 +106,7 @@ def _tab(liga_key: str):
 
     if tablas:
         liga_status_card(liga_key, liga_key, tablas)
-        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown(("<br>").strip(), unsafe_allow_html=True)
 
     section_header("📈 Tablas estadísticas FBRef")
     inline_tip(
