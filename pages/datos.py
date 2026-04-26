@@ -1,83 +1,107 @@
 """
-Intelligence Pro — pages/datos.py  v4.1
-Un textarea por liga → auto-detección de 9 tablas FBRef.
+Intelligence Pro — pages/datos.py  v4.3
+Parser real: process_fbref_paste(text) — una sola función para todas las tablas.
+Detección mejorada: revisa las primeras 8 líneas de cada bloque.
+Keys de almacenamiento = nombres exactos que usa profile.py.
 """
 import re
 import streamlit as st
 from ui.styles import inject_styles
 from ui.components import (
     bankroll_sidebar, pipeline_steps, section_header,
-    liga_status_card, inline_tip, toast,
-    auto_save_indicator, mark_modified, safe_key, TABLA_NOMBRES,
+    inline_tip, toast, auto_save_indicator, mark_modified, safe_key,
 )
 from data.leagues import LEAGUES, LEAGUE_NAMES
 from data import parser, fixtures as fixtures_mod
 
-# Keys = nombres exactos que usa profile.py en get_team_row(data_master, KEY, squad)
+# ── Nombres exactos que usa profile.py en get_team_row(data_master, KEY, squad)
+# Columnas distintivas para auto-detección (mínimo 2 deben aparecer)
 TABLE_SIGNATURES = {
-    "Tabla General":    {"Pts", "GF", "GA", "GD", "Pts/MP"},
-    "Standard Squad":   {"xG", "npxG", "xAG"},
-    "Shooting Squad":   {"SoT%", "G/Sh", "Dist"},
-    "Passing Squad":    {"TotDist", "PrgDist", "KP"},
-    "Pass Types Squad": {"Live", "Dead", "TB", "Sw"},
-    "GCA Squad":        {"SCA", "GCA", "SCA90"},
-    "Defense Squad":    {"TklW", "Blocks", "Int"},
-    "Possession Squad": {"Touches", "Mid 3rd"},
-    "PlayingTime Squad":{"Mn/MP", "PPM"},
-    "Misc Squad":       {"CrdY", "CrdR", "Fls"},
-    "ha":               {"Home", "Away"},
+    "Tabla General":     {"Pts", "GF", "GA", "GD", "Pts/MP"},
+    "Standard Squad":    {"xG", "npxG", "xAG"},
+    "Standard Opp":      {"xG", "npxG", "GA"},        # Opp tiene GA en lugar de GF
+    "Shooting Squad":    {"SoT%", "G/Sh", "Dist", "Sh"},
+    "Shooting Opp":      {"SoT%", "G/Sh", "GA"},
+    "PlayingTime Squad": {"Mn/MP", "PPM", "onxG"},
+    "Misc Squad":        {"CrdY", "CrdR", "Fls", "Fld"},
+    "Misc Opp":          {"CrdY", "CrdR", "Fls"},
+    "ha":                {"Home", "Away"},
 }
 
-# Nombres para mostrar en la UI
-TABLA_NOMBRES_LOCAL = {
+TABLA_NOMBRES = {
     "Tabla General":     "Tabla General",
-    "Standard Squad":    "Estándar",
-    "Shooting Squad":    "Disparos",
-    "Passing Squad":     "Pases",
-    "Pass Types Squad":  "Tipo Pase",
-    "GCA Squad":         "GCA/SCA",
-    "Defense Squad":     "Defensa",
-    "Possession Squad":  "Posesión",
-    "PlayingTime Squad": "Minutos",
-    "Misc Squad":        "Misc",
+    "Standard Squad":    "Estándar Squad",
+    "Standard Opp":      "Estándar Opp",
+    "Shooting Squad":    "Disparos Squad",
+    "Shooting Opp":      "Disparos Opp",
+    "PlayingTime Squad": "Minutos Squad",
+    "Misc Squad":        "Misc Squad",
+    "Misc Opp":          "Misc Opp",
     "ha":                "Casa/Vis",
 }
 
 
-def _detect(raw: str) -> dict:
+def _detect(raw: str) -> dict[str, str]:
+    """
+    Divide el texto en bloques y detecta qué tabla es cada uno.
+    Revisa las primeras 8 líneas de cada bloque buscando headers conocidos.
+    """
     blocks = re.split(r'\n{2,}', raw.strip())
-    detected, scores = {}, {}
+    if len(blocks) == 1:
+        # Sin líneas en blanco: tratar todo como un bloque
+        blocks = [raw.strip()]
+
+    detected: dict[str, str] = {}
+    scores:   dict[str, int] = {}
+
     for block in blocks:
         lines = [l for l in block.strip().splitlines() if l.strip()]
-        if len(lines) < 3:
+        if len(lines) < 2:
             continue
-        for header_line in lines[:2]:
-            tokens = set(re.split(r'\s+|\t', header_line.strip()))
+        # Revisar las primeras 8 líneas buscando headers de columnas
+        for header_line in lines[:8]:
+            tokens = set(re.split(r'[\s\t]+', header_line.strip()))
             for ttype, sig in TABLE_SIGNATURES.items():
                 score = len(sig & tokens)
                 if score >= 2 and score > scores.get(ttype, 0):
                     detected[ttype] = block
                     scores[ttype] = score
-            break
     return detected
 
 
 def _parse_all(liga_key: str, raw: str):
+    """
+    Auto-detecta y parsea todas las tablas del texto pegado.
+    Usa parser.process_fbref_paste() para tablas estadísticas.
+    Usa parser.parse_home_away_table() para la tabla HA.
+    """
     ss = st.session_state
     ss.setdefault("fbref_data", {}).setdefault(liga_key, {})
+
     detected = _detect(raw)
-    cargadas, errores = {}, []
+    cargadas: dict = {}
+    errores:  list = []
+
     for ttype, block in detected.items():
+        nombre = TABLA_NOMBRES.get(ttype, ttype)
         try:
             if ttype == "ha":
                 result = parser.parse_home_away_table(block)
-                ss.setdefault("ha_store", {})[liga_key] = result
+                if result:
+                    ss.setdefault("ha_store", {})[liga_key] = result
+                    cargadas[ttype] = result
+                else:
+                    errores.append(f"{nombre}: no se pudo parsear")
             else:
-                result = parser.parse_fbref_table(block, table_type=ttype)
-            ss["fbref_data"][liga_key][ttype] = result
-            cargadas[ttype] = result
+                result = parser.process_fbref_paste(block)
+                if result is not None and len(result) > 0:
+                    ss["fbref_data"][liga_key][ttype] = result
+                    cargadas[ttype] = result
+                else:
+                    errores.append(f"{nombre}: resultado vacío")
         except Exception as e:
-            errores.append(f"{TABLA_NOMBRES.get(ttype, ttype)}: {e}")
+            errores.append(f"{nombre}: {e}")
+
     mark_modified()
     return cargadas, errores
 
@@ -89,7 +113,7 @@ def render():
         st.divider()
         auto_save_indicator()
 
-    st.markdown(('<h1>📋 Cargar Ligas</h1>').strip(), unsafe_allow_html=True)
+    st.markdown('<h1>📋 Cargar Ligas</h1>', unsafe_allow_html=True)
     pipeline_steps()
 
     ss = st.session_state
@@ -107,14 +131,17 @@ def render():
         tablas = fbref_data.get(liga_key, {})
         if tablas:
             any_loaded = True
-            liga_status_card(liga_key, liga_key, tablas)
+            n = len(tablas)
+            total = len(TABLA_NOMBRES)
+            st.markdown(f"**{liga_key}** — `{n}/{total}` tablas")
+            badges = "  ".join(
+                f"{'✅' if k in tablas else '⬜'} {v}"
+                for k, v in TABLA_NOMBRES.items()
+            )
+            st.caption(badges)
+
     if not any_loaded:
-        st.markdown(
-            '<div style="text-align:center;padding:32px;background:var(--surface);'
-            'border:1px dashed var(--border);border-radius:var(--radius);color:var(--text-muted)">'
-            'Ninguna liga cargada todavía</div>',
-            unsafe_allow_html=True,
-        )
+        st.info("Ninguna liga cargada todavía")
 
 
 def _tab(liga_key: str):
@@ -122,21 +149,29 @@ def _tab(liga_key: str):
     tablas = ss.get("fbref_data", {}).get(liga_key, {})
 
     if tablas:
-        liga_status_card(liga_key, liga_key, tablas)
-        st.markdown(("<br>").strip(), unsafe_allow_html=True)
+        n = len(tablas)
+        st.success(f"✅ {liga_key}: {n} tablas cargadas — " +
+                   ", ".join(TABLA_NOMBRES.get(k, k) for k in tablas if k != "ha"))
+        st.markdown("<br>", unsafe_allow_html=True)
 
+    # ── Sección FBRef ────────────────────────────────────────────────────────
     section_header("📈 Tablas estadísticas FBRef")
-    inline_tip(
-        f"<strong>Cómo hacerlo:</strong> FBRef → <strong>{liga_key}</strong> → estadísticas<br>"
-        "Copia todo el bloque de tablas y pégalo aquí. "
-        "El sistema detecta automáticamente las 9 tablas."
+
+    st.info(
+        f"**Cómo hacerlo:** FBRef → {liga_key} → estadísticas → "
+        f"copia todo el bloque de tablas y pégalo aquí. "
+        f"El sistema detecta automáticamente las tablas."
     )
 
     raw = st.text_area(
         f"Pega todas las tablas de {liga_key}",
         height=220,
         key=safe_key("fbref_ta", liga_key),
-        placeholder="Pega el contenido de FBRef aquí...",
+        placeholder=(
+            "Pega el contenido de FBRef aquí...\n\n"
+            "Incluye: Tabla General, Squad Standard Stats, Shooting, etc.\n"
+            "Puedes pegar cada tabla por separado o todas juntas."
+        ),
         label_visibility="collapsed",
     )
 
@@ -147,18 +182,19 @@ def _tab(liga_key: str):
             with st.spinner("Detectando tablas..."):
                 cargadas, errores = _parse_all(liga_key, raw)
             if cargadas:
-                nombres = [TABLA_NOMBRES_LOCAL.get(t, t) for t in cargadas]
-                toast(f"✅ {len(cargadas)} tablas: {', '.join(nombres)}", "success")
-                faltantes = [TABLA_NOMBRES_LOCAL.get(t, t) for t in TABLE_SIGNATURES if t not in cargadas]
+                nombres = [TABLA_NOMBRES.get(t, t) for t in cargadas]
+                st.success(f"✅ {len(cargadas)} tablas detectadas: {', '.join(nombres)}")
+                faltantes = [TABLA_NOMBRES[t] for t in TABLE_SIGNATURES if t not in ss.get("fbref_data", {}).get(liga_key, {})]
                 if faltantes:
-                    toast(f"ℹ️ No detectadas: {', '.join(faltantes)}", "info")
+                    st.info(f"ℹ️ No detectadas: {', '.join(faltantes)} — puedes pegarlas individualmente abajo")
             else:
-                toast("❌ No se detectó ninguna tabla.", "error")
+                st.error("❌ No se detectó ninguna tabla. Asegúrate de copiar la tabla completa incluyendo el encabezado (Rk, Squad, MP...)")
             if errores:
-                with st.expander("⚠️ Errores"):
+                with st.expander("⚠️ Detalles de errores"):
                     for e in errores:
                         st.text(e)
             st.rerun()
+
     with c2:
         if tablas and st.button("🗑 Limpiar", key=safe_key("btn_reset", liga_key),
                                 use_container_width=True):
@@ -166,48 +202,108 @@ def _tab(liga_key: str):
             mark_modified()
             st.rerun()
 
-    # Tablas faltantes individuales
-    faltantes = [t for t in TABLE_SIGNATURES if t not in tablas]
-    if faltantes and tablas:
-        with st.expander(f"📌 Cargar tablas faltantes ({len(faltantes)})"):
-            sel = st.selectbox("Tabla", faltantes,
-                               format_func=lambda t: TABLA_NOMBRES_LOCAL.get(t, t),
-                               key=safe_key("sel_ind", liga_key))
-            raw_ind = st.text_area("Pegar tabla", height=140,
-                                   key=safe_key("ta_ind", liga_key, sel))
-            if st.button("Cargar", key=safe_key("btn_ind", liga_key, sel),
-                         disabled=not raw_ind.strip()):
+    # ── Cargar tabla individual ───────────────────────────────────────────────
+    faltantes_keys = [
+        t for t in TABLE_SIGNATURES
+        if t not in tablas and t != "ha"
+    ]
+    if faltantes_keys:
+        with st.expander(
+            f"📌 Cargar tabla individual ({len(faltantes_keys)} faltantes)",
+            expanded=not tablas
+        ):
+            st.info(
+                "Si la detección automática no funcionó para una tabla, "
+                "pégala aquí individualmente y selecciona su tipo."
+            )
+            sel = st.selectbox(
+                "¿Qué tabla estás pegando?",
+                options=faltantes_keys,
+                format_func=lambda t: TABLA_NOMBRES.get(t, t),
+                key=safe_key("sel_ind", liga_key)
+            )
+            raw_ind = st.text_area(
+                f"Pegar: {TABLA_NOMBRES.get(sel, sel)}",
+                height=160,
+                key=safe_key("ta_ind", liga_key, sel),
+                placeholder=f"Pega aquí solo la tabla '{TABLA_NOMBRES.get(sel, sel)}' de FBRef..."
+            )
+            if st.button("Cargar esta tabla", key=safe_key("btn_ind", liga_key, sel),
+                         disabled=not raw_ind.strip(), use_container_width=True):
                 try:
-                    if sel == "ha":
-                        result = parser.parse_home_away_table(raw_ind)
-                        ss.setdefault("ha_store", {})[liga_key] = result
+                    result = parser.process_fbref_paste(raw_ind)
+                    if result is not None and len(result) > 0:
+                        ss.setdefault("fbref_data", {}).setdefault(liga_key, {})[sel] = result
+                        mark_modified()
+                        st.success(f"✅ {TABLA_NOMBRES.get(sel, sel)} cargada — {len(result)} equipos")
+                        st.rerun()
                     else:
-                        result = parser.parse_fbref_table(raw_ind, table_type=sel)
-                    ss.setdefault("fbref_data", {}).setdefault(liga_key, {})[sel] = result
-                    mark_modified()
-                    toast(f"✅ {TABLA_NOMBRES.get(sel, sel)} cargada", "success")
-                    st.rerun()
+                        st.error("❌ No se pudo parsear. ¿Incluiste el encabezado de columnas?")
                 except Exception as e:
-                    toast(f"❌ {e}", "error")
+                    st.error(f"❌ {e}")
 
     st.divider()
 
-    # Fixtures
-    section_header("📅 Fixtures")
+    # ── Tabla HA ─────────────────────────────────────────────────────────────
+    ha_store = ss.get("ha_store", {})
+    ha_liga  = ha_store.get(liga_key)
+
+    section_header("🏠 Tabla Casa / Visitante (opcional pero mejora el modelo)")
+
+    if ha_liga:
+        st.success(f"✅ Home/Away cargado — {len(ha_liga)} equipos")
+    else:
+        st.info("Mejora la precisión del modelo con splits reales por condición de juego.")
+
+    raw_ha = st.text_area(
+        "Pegar tabla Home/Away",
+        height=140,
+        key=safe_key("ha_ta", liga_key),
+        placeholder="Pega la tabla Home/Away de FBRef (pestaña 'Home/Away' en la liga)...",
+        label_visibility="collapsed"
+    )
+    ch1, ch2 = st.columns([2, 1])
+    with ch1:
+        if st.button("🏠 Cargar Home/Away", key=safe_key("btn_ha", liga_key),
+                     use_container_width=True, disabled=not raw_ha.strip()):
+            try:
+                result = parser.parse_home_away_table(raw_ha)
+                if result:
+                    ss.setdefault("ha_store", {})[liga_key] = result
+                    mark_modified()
+                    st.success(f"✅ {len(result)} equipos cargados")
+                    st.rerun()
+                else:
+                    st.error("❌ No se pudo parsear la tabla H/A.")
+            except Exception as e:
+                st.error(f"❌ {e}")
+    with ch2:
+        if ha_liga and st.button("🗑 Limpiar", key=safe_key("btn_ha_reset", liga_key),
+                                 use_container_width=True):
+            ss.get("ha_store", {}).pop(liga_key, None)
+            mark_modified()
+            st.rerun()
+
+    st.divider()
+
+    # ── Fixtures ─────────────────────────────────────────────────────────────
+    section_header("📅 Fixtures de la temporada")
     fixtures_data = ss.get("fixtures_data", {})
     fixtures_liga = fixtures_data.get(liga_key)
-    n = len(fixtures_liga) if fixtures_liga else 0
+    n_fix = len(fixtures_liga) if fixtures_liga else 0
 
-    if n:
-        toast(f"✅ {n} partidos cargados", "success")
+    if n_fix:
+        st.success(f"✅ {n_fix} partidos en fixtures")
     else:
-        inline_tip(f"FBRef → {liga_key} → <em>Scores &amp; Fixtures</em> → copia toda la tabla → pega aquí")
+        st.info(f"FBRef → {liga_key} → Scores & Fixtures → copia toda la tabla → pega aquí")
 
-    raw_fix = st.text_area("Pegar Scores & Fixtures", height=140,
-                           key=safe_key("fix_ta", liga_key),
-                           placeholder="Pega la tabla Scores & Fixtures de FBRef...",
-                           label_visibility="collapsed")
-
+    raw_fix = st.text_area(
+        "Pegar Scores & Fixtures",
+        height=140,
+        key=safe_key("fix_ta", liga_key),
+        placeholder="Pega la tabla Scores & Fixtures de FBRef...",
+        label_visibility="collapsed"
+    )
     cf1, cf2 = st.columns([2, 1])
     with cf1:
         if st.button("📅 Cargar fixtures", key=safe_key("btn_fix", liga_key),
@@ -216,10 +312,10 @@ def _tab(liga_key: str):
                 result = fixtures_mod.parse_fixtures(raw_fix)
                 ss.setdefault("fixtures_data", {})[liga_key] = result
                 mark_modified()
-                toast(f"✅ {len(result)} partidos cargados", "success")
+                st.success(f"✅ {len(result)} partidos cargados")
                 st.rerun()
             except Exception as e:
-                toast(f"❌ {e}", "error")
+                st.error(f"❌ {e}")
     with cf2:
         if fixtures_liga and st.button("🗑 Limpiar", key=safe_key("btn_fix_reset", liga_key),
                                        use_container_width=True):
@@ -228,12 +324,19 @@ def _tab(liga_key: str):
             st.rerun()
 
     if fixtures_liga:
-        with st.expander(f"👁 Próximos partidos"):
-            proximos = [p for p in fixtures_liga if not p.get("jugado", True)][:5]
+        with st.expander("👁 Próximos partidos"):
+            proximos = [p for p in fixtures_liga if not p.get("jugado", True)][:8]
             if proximos:
                 import pandas as pd
-                cols = [c for c in ["fecha", "home", "away", "hora"]
-                        if c in pd.DataFrame(proximos).columns]
-                st.dataframe(pd.DataFrame(proximos)[cols], use_container_width=True, hide_index=True)
+                df_cols = [c for c in ["fecha", "home", "away", "hora"]
+                           if c in pd.DataFrame(proximos).columns]
+                st.dataframe(
+                    pd.DataFrame(proximos)[df_cols],
+                    use_container_width=True,
+                    hide_index=True
+                )
+            else:
+                st.caption("Sin próximos partidos.")
+
 
 render()
