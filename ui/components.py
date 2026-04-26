@@ -358,26 +358,27 @@ def momios_inline_editor(partidos: list[dict]) -> dict:
 # ─── Sección header ────────────────────────────────────────────
 
 def section_header(title: str, count: Optional[int] = None):
-    count_html = f'<div class="section-count">{count}</div>' if count is not None else ""
-    st.markdown((f"""
-    <div class="section-header">
-        <div class="section-title">{title}</div>
-        {count_html}
-    </div>
-    """).strip(), unsafe_allow_html=True)
+    badge = f"  `{count}`" if count is not None else ""
+    st.markdown(f"**{title}**{badge}")
 
 
 # ─── Toast ────────────────────────────────────────────────────
 
 def toast(msg: str, tipo: str = "success"):
-    """Tipo: success | error | info"""
-    st.markdown((f'<div class="ip-toast {tipo}">{msg}</div>').strip(), unsafe_allow_html=True)
+    if tipo == "success":
+        st.success(msg)
+    elif tipo == "error":
+        st.error(msg)
+    else:
+        st.info(msg)
 
 
 # ─── Inline tip ───────────────────────────────────────────────
 
 def inline_tip(html: str):
-    st.markdown((f'<div class="inline-tip">{html}</div>').strip(), unsafe_allow_html=True)
+    import re as _re
+    text = _re.sub(r'<[^>]+>', '', html).strip()
+    st.info(text)
 
 
 # ─── Auto-save indicator ───────────────────────────────────────
