@@ -75,8 +75,8 @@ def pipeline_steps():
     jornada        = ss.get("jornada_activa", [])
     historial      = ss.get("historial", [])
 
-    ligas_con_datos    = sum(1 for v in fbref_data.values() if v)
-    ligas_con_fixtures = sum(1 for v in fixtures_data.values() if v)
+    ligas_con_datos    = sum(1 for v in fbref_data.values() if v is not None and len(v) > 0)
+    ligas_con_fixtures = sum(1 for v in fixtures_data.values() if v is not None and len(v) > 0)
     partidos_con_momios = sum(
         1 for v in momios_data.values()
         if isinstance(v, dict) and any(
