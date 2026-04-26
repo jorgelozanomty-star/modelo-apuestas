@@ -148,6 +148,15 @@ def render():
     _guardados(momios_data)
 
 
+def _parse_fecha_safe(f):
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y"):
+        try:
+            return datetime.datetime.strptime(str(f).strip(), fmt).date()
+        except Exception:
+            pass
+    return None
+
+
 def _inline(todos, momios_data):
     ss = st.session_state
     ligas = list({p["liga"] for p in todos})
@@ -157,50 +166,73 @@ def _inline(todos, momios_data):
         liga_f = st.selectbox("Liga", ["Todas"] + sorted(ligas), key="mm_liga")
     with cf2:
         periodo = st.selectbox("Período",
-                               ["Próximos 3 días", "Esta semana", "Próximas 2 semanas", "Todo"],
+                               ["Esta semana", "Próximos 3 días", "Próximas 2 semanas", "Todo"],
                                key="mm_periodo")
 
     hoy   = datetime.date.today()
     dias  = {"Próximos 3 días": 3, "Esta semana": 7, "Próximas 2 semanas": 14, "Todo": 9999}[periodo]
     limite = hoy + datetime.timedelta(days=dias)
 
-    def pf(f):
-        try:
-            return datetime.datetime.strptime(str(f), "%Y-%m-%d").date()
-        except Exception:
-            return hoy + datetime.timedelta(days=1)
-
-    filtrados = [
-        p for p in todos
-        if (liga_f == "Todas" or p["liga"] == liga_f) and pf(p.get("fecha", "")) <= limite
-    ][:30]
+    filtrados = []
+    for p in todos:
+        if liga_f != "Todas" and p["liga"] != liga_f:
+            continue
+        fecha_raw = p.get("fecha") or p.get("Date") or ""
+        fecha_p = _parse_fecha_safe(fecha_raw)
+        if fecha_p is None or (hoy <= fecha_p <= limite):
+            filtrados.append(p)
+    filtrados = filtrados[:40]
 
     if not filtrados:
-        inline_tip("Sin partidos en el período seleccionado.")
+        st.info("Sin partidos en el período. Prueba con 'Todo'.")
         return
 
     section_header("Partidos", len(filtrados))
-    inline_tip("<strong>Formato:</strong> Americano <code>-110</code>/<code>+200</code> o Decimal <code>1.90</code>. Deja en blanco lo que no quieras apostar.")
+    st.info("**Formato:** Americano `-110`/`+200` o Decimal `1.90` · Deja en blanco lo que no quieras apostar")
 
-    for p in filtrados:
-        pk = f"{p.get('home','')}_{p.get('away','')}_{p.get('fecha','')}"
-        p["momios"] = momios_data.get(pk, {})
+    # Headers
+    hc = st.columns([3, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1])
+    for col, lbl in zip(hc, ["Partido","Local","Empate","Visit.","O 2.5","U 2.5","BTTS"]):
+        col.markdown(f"**{lbl}**")
+    st.divider()
 
-    editados = momios_inline_editor(filtrados)
+    inputs_map = {}
+    for i, p in enumerate(filtrados):
+        home  = p.get("home") or p.get("Home") or "?"
+        away  = p.get("away") or p.get("Away") or "?"
+        fecha = p.get("fecha") or p.get("Date") or ""
+        pk    = f"{home}_{away}_{fecha}"
+        ex    = momios_data.get(pk, {})
 
-    st.markdown(("<br>").strip(), unsafe_allow_html=True)
+        row = st.columns([3, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1])
+        with row[0]:
+            st.markdown(f"**{home} vs {away}** · {p['liga']} · {fecha}", unsafe_allow_html=True)
+        fields = [("home","-130"),("draw","+280"),("away","+350"),
+                  ("over25","-115"),("under25","-105"),("btts_yes","-120")]
+        row_inputs = {}
+        for j, (key, ph) in enumerate(fields):
+            with row[j+1]:
+                row_inputs[key] = st.text_input(
+                    key, value=str(ex[key]) if ex.get(key) else "",
+                    placeholder=ph, key=f"mi_{i}_{key}",
+                    label_visibility="collapsed"
+                )
+        inputs_map[pk] = {"inputs": row_inputs, "meta": {
+            "home": home, "away": away, "fecha": fecha,
+            "liga": p["liga"], "liga_key": p.get("liga_key","")
+        }}
+
+    st.markdown("<br>", unsafe_allow_html=True)
     if st.button("💾 Guardar momios", use_container_width=True, key="btn_save_inline"):
         guardados = 0
-        for pk, vals in editados.items():
-            hv = _to_decimal(vals.get("home", ""))
-            dv = _to_decimal(vals.get("draw", ""))
-            av = _to_decimal(vals.get("away", ""))
-            if any([hv, dv, av]):
-                momios_data[pk] = {"home": hv, "draw": dv, "away": av, "meta": vals.get("meta", {})}
+        for pk, data in inputs_map.items():
+            vals = {k: _to_decimal(v) for k, v in data["inputs"].items()}
+            if any(v for v in vals.values() if v):
+                momios_data[pk] = {**vals, "meta": data["meta"]}
                 guardados += 1
         ss["momios_data"] = momios_data
         mark_modified()
-        toast(f"✅ {guardados} partidos guardados", "success")
+        st.success(f"✅ {guardados} partidos guardados")
         st.rerun()
 
 
