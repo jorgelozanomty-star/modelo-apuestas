@@ -1,59 +1,56 @@
 """
 data/fixtures.py - Parser Scores & Fixtures + H2H de FBRef.
+PATCHED v4.1: usa tab-split cuando está disponible para evitar
+que el nombre del estadio se concatene con el equipo visitante.
 """
 import re
 import pandas as pd
 from datetime import date, datetime, timedelta
 from data.parser import EQUIPOS_MAP
 
+
 def _norm(name):
     n = str(name).strip()
     return EQUIPOS_MAP.get(n, n)
 
+
 _TEAM_ENDS = {
-    'City','United','Rovers','Town','Athletic','FC','AFC','Forest','Palace',
-    'Villa','Hotspur','Wanderers','County','Albion','Wednesday','Rangers',
-    'Celtic','Burnley','Brentford','Brighton','Fulham','Sunderland','Liverpool',
-    'Arsenal','Everton','Chelsea','Bournemouth','Newcastle','Wolves','Leeds',
-    'Leicester','Azul','Laguna','Luis','Juárez','Querétaro','Mazatlán',
-    'Necaxa','Toluca','Pachuca','Puebla','Atlas','Xolos',
+    'City', 'United', 'Rovers', 'Town', 'Athletic', 'FC', 'AFC', 'Forest', 'Palace',
+    'Villa', 'Hotspur', 'Wanderers', 'County', 'Albion', 'Wednesday', 'Rangers',
+    'Celtic', 'Burnley', 'Brentford', 'Brighton', 'Fulham', 'Sunderland', 'Liverpool',
+    'Arsenal', 'Everton', 'Chelsea', 'Bournemouth', 'Newcastle', 'Wolves', 'Leeds',
+    'Leicester', 'Azul', 'Laguna', 'Luis', 'Juárez', 'Querétaro', 'Mazatlán',
+    'Necaxa', 'Toluca', 'Pachuca', 'Puebla', 'Atlas', 'Xolos',
 }
 
 _VENUE_WORDS = {
-    'Stadium','Park','Road','Lane','Ground','Arena','Cottage','Field','Bridge',
-    'Emirates','Anfield','Stamford','Etihad','Molineux','Craven','Elland',
-    'Vitality','Selhurst','Goodison','Turf','American','Head-to-Head','Match',
-    'Report','Head',
-    # Venues españoles / Liga MX
-    'Estadio','Azteca','Universitario','Hidalgo','Cuauhtémoc','Jalisco',
-    'Akron','BBVA','Nemesio','TSM','Caliente','Olímpico','Victoria',
-    'Corregidora','Kraken','Encanto',
-    # General / Italian
-    'Stadio','Stade','Stadion','Arena',
-    # Bundesliga / German venues
-    'Allianz','Signal','Iduna','Volksparkstadion','Voith','RheinEnergieSTADION',
-    'BayArena','Volkswagen','PreZero','MHPArena','Europa-Park','Weserstadion',
-    'Olympiastadion','AOK','Donauarena','Schwarzwald','Mewa','Wildpark',
-    'Deutsche','Telekom','WWK','Coface','Commerzbank','Deutsche Bank',
-    # La Liga / Spanish venues
-    'Bernabéu','Camp','Nou','Metropolitano','Pizjuán','Benito',
-    'Villamarín','Mestalla','Ceramic','Reale','Romareda',
-    'Coliseum','Alfonso','Pérez','Riyadh','Air','Vallecas',
-    'Campo','Fútbol','Futbol',
-    'Montjuïc','Civitas','Power','Abanca','Balaídos','Mendizorroza',
-    'Martínez','Valero','Gran','Canaria','RCDE','Stadium',
-    'Nuevo','Los','Cármenes','El','Sadar','San','Mamés',
-    'Butarque','Ipurua','Municipal',
-    # Serie A / Italian venues
-    'Giuseppe','Meazza','Olimpico','Maradona','Franchi','Ferraris',
-    'Tardini','Castellani','Bentegodi','Unipol','Penzo',
-    'Ennio','Tardini','Dall','Ara','Renato','Marc','Antonio',
-    'Artemio','Comunale','Luigi','Ferraris','Dino','Manuzzi',
-    'Brianteo','Gewiss','Bluenergy','Arechi','Granillo',
-    'Teofilo','Patini','Zini','Druso','Friuli','Diego',
+    'Stadium', 'Park', 'Road', 'Lane', 'Ground', 'Arena', 'Cottage', 'Field', 'Bridge',
+    'Emirates', 'Anfield', 'Stamford', 'Etihad', 'Molineux', 'Craven', 'Elland',
+    'Vitality', 'Selhurst', 'Goodison', 'Turf', 'American', 'Head-to-Head', 'Match',
+    'Report', 'Head', 'Old', 'Trafford', 'Gtech', 'Bramall', 'Portman',
+    # Liga MX
+    'Estadio', 'Azteca', 'Universitario', 'Hidalgo', 'Cuauhtémoc', 'Jalisco',
+    'Akron', 'BBVA', 'Nemesio', 'TSM', 'Caliente', 'Olímpico', 'Victoria',
+    'Corregidora', 'Kraken', 'Encanto',
+    # General
+    'Stadio', 'Stade', 'Stadion',
+    # Bundesliga
+    'Allianz', 'Signal', 'Iduna', 'Volksparkstadion', 'BayArena', 'Volkswagen',
+    'PreZero', 'MHPArena', 'Europa-Park', 'Weserstadion', 'Olympiastadion',
+    # La Liga
+    'Bernabéu', 'Camp', 'Nou', 'Metropolitano', 'Pizjuán', 'Villamarín',
+    'Mestalla', 'Ceramic', 'Romareda', 'Coliseum', 'Vallecas', 'Montjuïc',
+    'Civitas', 'Balaídos', 'Mendizorroza', 'Sadar', 'Mamés', 'Ipurua',
+    # Serie A
+    'Giuseppe', 'Meazza', 'Olimpico', 'Maradona', 'Franchi', 'Ferraris',
+    'Tardini', 'Bentegodi', 'Unipol', 'Penzo', 'Gewiss', 'Bluenergy', 'Arechi', 'Friuli',
+    # Premier League venues extra
+    'Hillsborough', 'Carrow', 'Deepdale', 'Kassam', 'Madejski', 'King',
+    'Power', 'Adams', 'Dean', 'Court', 'DW', 'AJ', 'bet365', 'Select',
+    'Hill', 'Dickinson', 'Light', 'James', 'Express', 'Weston', 'Homes',
+    'One', 'Call', 'Boundary', 'Oakwell', 'KCOM', 'MKM', 'AESSEAL',
 }
 
-# Nombres completos de equipos conocidos para mejor split
 _KNOWN_TEAMS = set(EQUIPOS_MAP.keys()) | set(EQUIPOS_MAP.values()) | {
     # Bundesliga
     'Bayern München', 'Bayern', 'Borussia Dortmund', 'Dortmund',
@@ -62,7 +59,7 @@ _KNOWN_TEAMS = set(EQUIPOS_MAP.keys()) | set(EQUIPOS_MAP.values()) | {
     'Borussia Mönchengladbach', 'Gladbach', 'Stuttgart', 'Augsburg',
     'Hoffenheim', 'Mainz', 'Heidenheim', 'Werder Bremen', 'Bremen',
     'Hamburg', 'FC Köln', 'Köln', 'St. Pauli',
-    # La Liga — nombres exactos FBRef
+    # La Liga
     'Real Madrid', 'Barcelona', 'Atletico Madrid', 'Atlético Madrid',
     'Sevilla', 'Real Sociedad', 'Athletic Bilbao', 'Athletic Club',
     'Real Betis', 'Valencia', 'Villarreal', 'Osasuna', 'Mallorca',
@@ -75,11 +72,11 @@ _KNOWN_TEAMS = set(EQUIPOS_MAP.keys()) | set(EQUIPOS_MAP.values()) | {
     'Venezia', 'Verona', 'Parma', 'Monza', 'Empoli', 'Udinese',
     'Cagliari', 'Como', 'Lecce', 'Sassuolo', 'Pisa', 'Cremonese',
     'Frosinone', 'Salernitana', 'Spezia',
-    # Liga MX nombres completos
+    # Liga MX
     'Puebla', 'Querétaro', 'Necaxa', 'Toluca', 'Pachuca', 'Atlas',
     'Santos Laguna', 'Cruz Azul', 'América', 'Pumas', 'Tigres', 'Rayados',
     'Chivas', 'Xolos', 'Juárez', 'Mazatlán', 'San Luis', 'León',
-    # Premier League — nombres exactos como aparecen en FBRef fixtures
+    # Premier League
     'Sunderland', 'Fulham', 'Liverpool', 'Arsenal', 'Chelsea', 'Everton',
     'Brentford', 'Brighton', 'Bournemouth', 'Newcastle United', 'Newcastle',
     'Nottingham Forest', 'Nottm Forest', 'Manchester United', 'Man United',
@@ -90,163 +87,310 @@ _KNOWN_TEAMS = set(EQUIPOS_MAP.keys()) | set(EQUIPOS_MAP.values()) | {
     'Burnley', 'Luton', 'Luton Town', 'Sheffield United',
 }
 
+
 def _split_home_away(tokens):
-    # Limpiar venue words del final
     clean = []
     for t in tokens:
-        if t in _VENUE_WORDS: break
-        if t.replace(',','').isdigit() and len(t.replace(',','')) > 3: break
+        if t in _VENUE_WORDS:
+            break
+        if t.replace(',', '').isdigit() and len(t.replace(',', '')) > 3:
+            break
         clean.append(t)
-    if len(clean) < 2: return '', ''
-
-    # Intentar todos los splits — preferir splits donde ambas partes son equipos conocidos
+    if len(clean) < 2:
+        return '', ''
     best = None
     for mid in range(1, len(clean)):
         h = ' '.join(clean[:mid])
         a = ' '.join(clean[mid:])
-        h_norm = _norm(h); a_norm = _norm(a)
-        h_known = h_norm in _KNOWN_TEAMS or h in _KNOWN_TEAMS or clean[mid-1] in _TEAM_ENDS
+        h_norm = _norm(h)
+        a_norm = _norm(a)
+        h_known = h_norm in _KNOWN_TEAMS or h in _KNOWN_TEAMS or clean[mid - 1] in _TEAM_ENDS
         a_known = a_norm in _KNOWN_TEAMS or a in _KNOWN_TEAMS or clean[-1] in _TEAM_ENDS
         if h_known and a_known:
             if best is None:
                 best = (h_norm, a_norm)
     if best:
         return best
-
-    # Fallback: último token en TEAM_ENDS
     for mid in range(1, len(clean)):
-        if clean[mid-1] in _TEAM_ENDS and clean[-1] in _TEAM_ENDS:
+        if clean[mid - 1] in _TEAM_ENDS and clean[-1] in _TEAM_ENDS:
             return _norm(' '.join(clean[:mid])), _norm(' '.join(clean[mid:]))
-
-    # Último fallback: mitad
     mid = len(clean) // 2
     return _norm(' '.join(clean[:mid])), _norm(' '.join(clean[mid:]))
 
-def parse_fixtures(text):
-    if not text or len(text) < 20: return None
+
+def _parse_line_with_tabs(line):
+    """
+    Parsea una línea de fixtures usando estructura de tabs.
+    FBRef fixtures: Wk  Day  Date  Time  Home  Score  Away  Attendance  Venue  ...
+    Para partidos futuros sin score: Home y Away son columnas separadas.
+    """
+    if '\t' not in line:
+        return None
+    parts = [p.strip() for p in line.split('\t')]
+
+    # Buscar la fecha
+    date_str = None
+    date_idx = None
+    for i, p in enumerate(parts):
+        if re.match(r'\d{4}-\d{2}-\d{2}', str(p)):
+            date_str = str(p)[:10]
+            date_idx = i
+            break
+    if date_str is None:
+        return None
     try:
-        lines = [l.strip() for l in text.replace('\r\n','\n').replace('\r','\n').split('\n')]
+        match_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except Exception:
+        return None
+
+    wk = None
+    try:
+        wk = int(parts[0])
+    except Exception:
+        pass
+
+    # Campo de tiempo está justo después de la fecha
+    time_str = ""
+    if date_idx + 1 < len(parts):
+        raw_time = parts[date_idx + 1]
+        m = re.match(r'(\d{1,2}:\d{2})', raw_time)
+        if m:
+            time_str = m.group(1)
+
+    # Campos después del tiempo: Home, Score/empty, Away, Attendance, Venue...
+    # Filtrar partes vacías para encontrar los datos reales
+    after = parts[date_idx + 2:]  # todo después del tiempo
+    non_empty = [p for p in after if p.strip()]
+
+    if len(non_empty) < 2:
+        return None
+
+    home_raw = non_empty[0].strip()
+
+    # Detectar si el segundo campo es un score
+    score_raw = non_empty[1].strip() if len(non_empty) > 1 else ""
+    away_raw = non_empty[2].strip() if len(non_empty) > 2 else ""
+
+    if re.match(r'\d+[-–]\d+', score_raw):
+        # Partido jugado: Home, Score, Away
+        score = score_raw.replace('–', '-')
+        played = True
+    else:
+        # Partido futuro: Home, Away (el score está vacío = tab vacío)
+        # score_raw es en realidad el Away
+        away_raw = score_raw
+        score = None
+        played = False
+
+    home = _norm(home_raw)
+    away = _norm(away_raw)
+
+    if not home or not away or home == away or len(home) < 2 or len(away) < 2:
+        return None
+
+    return {
+        'wk': wk, 'date': match_date, 'time': time_str,
+        'home': home, 'away': away, 'score': score, 'played': played
+    }
+
+
+def parse_fixtures(text):
+    if not text or len(text) < 20:
+        return None
+    try:
+        lines = [l.strip() for l in text.replace('\r\n', '\n').replace('\r', '\n').split('\n')]
         rows = []
         header_found = False
+        has_tabs = sum(1 for l in lines[:30] if '\t' in l) >= 3
+
         for line in lines:
-            line = line.replace('Club Crest','').strip()
-            if not line: continue
-            if not header_found:
-                if 'Home' in line and 'Away' in line: header_found = True
+            line = line.replace('Club Crest', '').strip()
+            if not line:
                 continue
-            if 'Home' in line and 'Away' in line: continue
-            tokens = line.replace('\t',' ').split()
-            if len(tokens) < 4: continue
+            if not header_found:
+                if 'Home' in line and 'Away' in line:
+                    header_found = True
+                continue
+            if 'Home' in line and 'Away' in line:
+                continue
+
+            # Intentar tab-based parsing primero (mucho más preciso para futuros)
+            if has_tabs and '\t' in line:
+                result = _parse_line_with_tabs(line)
+                if result and result['home'] and result['away']:
+                    rows.append(result)
+                    continue
+
+            # Fallback: space-based
+            tokens = line.replace('\t', ' ').split()
+            if len(tokens) < 4:
+                continue
             date_str = date_idx = None
-            for i,tok in enumerate(tokens):
+            for i, tok in enumerate(tokens):
                 if re.match(r'^\d{4}-\d{2}-\d{2}$', tok):
-                    date_str = tok; date_idx = i; break
-            if date_str is None: continue
-            try: match_date = datetime.strptime(date_str,'%Y-%m-%d').date()
-            except: continue
+                    date_str = tok
+                    date_idx = i
+                    break
+            if date_str is None:
+                continue
+            try:
+                match_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            except Exception:
+                continue
             wk = None
-            try: wk = int(tokens[0])
-            except: pass
-            after = tokens[date_idx+1:]
-            time_str = ""; start = 0
-            for i,t in enumerate(after):
-                if re.match(r'^\d{1,2}:\d{2}$',t): time_str=t; start=i+1
-                elif re.match(r'^\(\d+:\d+\)$',t): start=i+1
-                else: break
+            try:
+                wk = int(tokens[0])
+            except Exception:
+                pass
+            after = tokens[date_idx + 1:]
+            time_str = ""
+            start = 0
+            for i, t in enumerate(after):
+                if re.match(r'^\d{1,2}:\d{2}$', t):
+                    time_str = t
+                    start = i + 1
+                elif re.match(r'^\(\d+:\d+\)$', t):
+                    start = i + 1
+                else:
+                    break
             after = after[start:]
             score_idx = None
-            for i,t in enumerate(after):
-                if re.match(r'^\d+[-–]\d+$',t): score_idx=i; break
+            for i, t in enumerate(after):
+                if re.match(r'^\d+[-–]\d+$', t):
+                    score_idx = i
+                    break
             if score_idx is not None:
-                home  = _norm(' '.join(after[:score_idx]))
-                score = after[score_idx].replace('–','-')
-                rest  = after[score_idx+1:]
+                home = _norm(' '.join(after[:score_idx]))
+                score = after[score_idx].replace('–', '-')
+                rest = after[score_idx + 1:]
                 away_t = []
                 for t in rest:
-                    if t.replace(',','').isdigit() and int(t.replace(',',''))>1000: break
-                    if t in _VENUE_WORDS: break
+                    if t.replace(',', '').isdigit() and int(t.replace(',', '')) > 1000:
+                        break
+                    if t in _VENUE_WORDS:
+                        break
                     away_t.append(t)
-                away = _norm(' '.join(away_t)); played = True
+                away = _norm(' '.join(away_t))
+                played = True
             else:
                 home, away = _split_home_away(after)
-                score = None; played = False
-            if not home or not away or home==away: continue
-            if len(home)<2 or len(away)<2: continue
-            rows.append({'wk':wk,'date':match_date,'time':time_str,
-                         'home':home,'away':away,'score':score,'played':played})
-        if not rows: return None
+                score = None
+                played = False
+            if not home or not away or home == away:
+                continue
+            if len(home) < 2 or len(away) < 2:
+                continue
+            rows.append({
+                'wk': wk, 'date': match_date, 'time': time_str,
+                'home': home, 'away': away, 'score': score, 'played': played
+            })
+
+        if not rows:
+            return None
         df = pd.DataFrame(rows)
-        df = df.drop_duplicates(subset=['date','home','away'])
+        df = df.drop_duplicates(subset=['date', 'home', 'away'])
         return df.reset_index(drop=True)
-    except: return None
+    except Exception:
+        return None
+
 
 def get_current_gameweek(fixtures_df, today=None):
-    if fixtures_df is None or len(fixtures_df)==0: return None
-    if today is None: today = date.today()
-    pending = fixtures_df[(~fixtures_df['played'])&(fixtures_df['date']>=today)]
-    if len(pending)==0: return None
+    if fixtures_df is None or len(fixtures_df) == 0:
+        return None
+    if today is None:
+        today = date.today()
+    pending = fixtures_df[(~fixtures_df['played']) & (fixtures_df['date'] >= today)]
+    if len(pending) == 0:
+        return None
     next_date = pending['date'].min()
-    wm = fixtures_df[(~fixtures_df['played'])&
-                     (fixtures_df['date']>=next_date-timedelta(1))&
-                     (fixtures_df['date']<=next_date+timedelta(4))]
+    wm = fixtures_df[
+        (~fixtures_df['played']) &
+        (fixtures_df['date'] >= next_date - timedelta(1)) &
+        (fixtures_df['date'] <= next_date + timedelta(4))
+    ]
     if 'wk' in wm.columns and wm['wk'].notna().any():
         wk = wm['wk'].dropna().mode()
-        return int(wk.iloc[0]) if len(wk)>0 else None
+        return int(wk.iloc[0]) if len(wk) > 0 else None
     return None
 
+
 def get_gameweek_matches(fixtures_df, wk=None, today=None):
-    if fixtures_df is None or len(fixtures_df)==0: return pd.DataFrame()
-    if today is None: today = date.today()
-    if wk is None: wk = get_current_gameweek(fixtures_df, today)
+    if fixtures_df is None or len(fixtures_df) == 0:
+        return pd.DataFrame()
+    if today is None:
+        today = date.today()
     if wk is None:
-        return fixtures_df[(~fixtures_df['played'])&
-                           (fixtures_df['date']>=today)&
-                           (fixtures_df['date']<=today+timedelta(7))].copy()
-    return fixtures_df[fixtures_df['wk']==wk].copy()
+        wk = get_current_gameweek(fixtures_df, today)
+    if wk is None:
+        return fixtures_df[
+            (~fixtures_df['played']) &
+            (fixtures_df['date'] >= today) &
+            (fixtures_df['date'] <= today + timedelta(7))
+        ].copy()
+    return fixtures_df[fixtures_df['wk'] == wk].copy()
+
 
 def parse_h2h(text):
-    if not text or len(text)<20: return None
+    if not text or len(text) < 20:
+        return None
     try:
-        lines = [l.strip() for l in text.replace('\r\n','\n').replace('\r','\n').split('\n')]
-        matches = []; header_found = False
+        lines = [l.strip() for l in text.replace('\r\n', '\n').replace('\r', '\n').split('\n')]
+        matches = []
+        header_found = False
         for line in lines:
-            line = line.replace('Club Crest','').strip()
-            if not line: continue
-            if not header_found:
-                if 'Home' in line and ('Score' in line or 'Away' in line): header_found=True
+            line = line.replace('Club Crest', '').strip()
+            if not line:
                 continue
-            if 'Home' in line and 'Away' in line: continue
-            tokens = line.replace('\t',' ').split()
-            if len(tokens)<4: continue
+            if not header_found:
+                if 'Home' in line and ('Score' in line or 'Away' in line):
+                    header_found = True
+                continue
+            if 'Home' in line and 'Away' in line:
+                continue
+            tokens = line.replace('\t', ' ').split()
+            if len(tokens) < 4:
+                continue
             score_m = None
             for tok in tokens:
-                m = re.match(r'^(\d+)[-–](\d+)$',tok)
-                if m: score_m=m; break
-            if score_m is None: continue
-            gf=int(score_m.group(1)); ga=int(score_m.group(2))
-            winner = 'home' if gf>ga else ('away' if ga>gf else 'draw')
-            matches.append({'gf':gf,'ga':ga,'total_goals':gf+ga,'winner':winner})
-        if not matches: return None
-        recent = matches[:10]; total = len(recent)
-        if total==0: return None
+                m = re.match(r'^(\d+)[-–](\d+)$', tok)
+                if m:
+                    score_m = m
+                    break
+            if score_m is None:
+                continue
+            gf = int(score_m.group(1))
+            ga = int(score_m.group(2))
+            winner = 'home' if gf > ga else ('away' if ga > gf else 'draw')
+            matches.append({'gf': gf, 'ga': ga, 'total_goals': gf + ga, 'winner': winner})
+        if not matches:
+            return None
+        recent = matches[:10]
+        total = len(recent)
+        if total == 0:
+            return None
         return {
             'total_matches': total,
-            'home_wins':  sum(1 for m in recent if m['winner']=='home'),
-            'draws':      sum(1 for m in recent if m['winner']=='draw'),
-            'away_wins':  sum(1 for m in recent if m['winner']=='away'),
-            'avg_goals':  round(sum(m['total_goals'] for m in recent)/total,2),
-            'btts_pct':   round(sum(1 for m in recent if m['gf']>0 and m['ga']>0)/total*100,1),
-            'over25_pct': round(sum(1 for m in recent if m['total_goals']>2)/total*100,1),
-            'over15_pct': round(sum(1 for m in recent if m['total_goals']>1)/total*100,1),
+            'home_wins':  sum(1 for m in recent if m['winner'] == 'home'),
+            'draws':      sum(1 for m in recent if m['winner'] == 'draw'),
+            'away_wins':  sum(1 for m in recent if m['winner'] == 'away'),
+            'avg_goals':  round(sum(m['total_goals'] for m in recent) / total, 2),
+            'btts_pct':   round(sum(1 for m in recent if m['gf'] > 0 and m['ga'] > 0) / total * 100, 1),
+            'over25_pct': round(sum(1 for m in recent if m['total_goals'] > 2) / total * 100, 1),
+            'over15_pct': round(sum(1 for m in recent if m['total_goals'] > 1) / total * 100, 1),
             'recent':     recent,
         }
-    except: return None
+    except Exception:
+        return None
+
 
 def h2h_lambda_adjustment(h2h, lam_l, lam_v, weight=0.15):
-    if h2h is None or h2h['total_matches']<3: return lam_l, lam_v
+    if h2h is None or h2h['total_matches'] < 3:
+        return lam_l, lam_v
     total = h2h['total_matches']
-    hr = h2h['home_wins']/total; ar = h2h['away_wins']/total
-    model_share = lam_l/(lam_l+lam_v) if (lam_l+lam_v)>0 else 0.5
-    denom = hr+ar; h2h_share = hr/denom if denom>0 else 0.5
-    adj = (h2h_share - model_share)*weight
-    return round(max(0.1,lam_l*(1+adj)),3), round(max(0.1,lam_v*(1-adj)),3)
+    hr = h2h['home_wins'] / total
+    ar = h2h['away_wins'] / total
+    model_share = lam_l / (lam_l + lam_v) if (lam_l + lam_v) > 0 else 0.5
+    denom = hr + ar
+    h2h_share = hr / denom if denom > 0 else 0.5
+    adj = (h2h_share - model_share) * weight
+    return round(max(0.1, lam_l * (1 + adj)), 3), round(max(0.1, lam_v * (1 - adj)), 3)
