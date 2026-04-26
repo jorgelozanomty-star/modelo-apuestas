@@ -54,14 +54,14 @@ def bankroll_sidebar():
     delta_str = f"{'↑' if delta >= 0 else '↓'} ${abs(delta):,.0f} ({abs(pct):.1f}%)"
     picks_str = f"{len(jornada)} pick{'s' if len(jornada) != 1 else ''} esta jornada"
 
-    st.markdown(f"""
+    st.markdown((f"""
     <div class="bankroll-widget">
         <div class="bankroll-label">Bankroll</div>
         <div class="bankroll-amount">${bankroll:,.0f} <span style="font-size:1rem;font-weight:400;opacity:.6">MXN</span></div>
         <div class="bankroll-delta">{delta_str}</div>
         <div class="bankroll-picks">{picks_str}</div>
     </div>
-    """, unsafe_allow_html=True)
+    """).strip(), unsafe_allow_html=True)
 
 
 # ─── Pipeline stepper ────────────────────────────────────────
@@ -126,7 +126,7 @@ def pipeline_steps():
         {step_html(3, 'Picks', sub3, s3)}
         {step_html(4, 'Resultados', sub4, s4)}
     </div>"""
-    st.markdown(html, unsafe_allow_html=True)
+    st.markdown((html).strip(), unsafe_allow_html=True)
 
 
 # ─── Next action CTA ──────────────────────────────────────────
@@ -153,7 +153,7 @@ def next_action_cta():
     else:
         icon, title, sub = "✅", f"Tienes {len(jornada)} picks listos", "Registra los resultados al final de la jornada"
 
-    st.markdown(f"""
+    st.markdown((f"""
     <div class="next-action">
         <div class="next-action-icon">{icon}</div>
         <div class="next-action-text">
@@ -161,7 +161,7 @@ def next_action_cta():
             <div class="next-action-sub">{sub}</div>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """).strip(), unsafe_allow_html=True)
 
 
 # ─── Liga status card ──────────────────────────────────────────
@@ -191,7 +191,7 @@ def liga_status_card(liga_key: str, liga_display: str, tablas_cargadas: dict):
         cls = "ok" if ok else "miss"
         badges += f'<span class="table-badge {cls}">{nombre}</span>'
 
-    st.markdown(f"""
+    st.markdown((f"""
     <div class="liga-status-card">
         <div class="liga-status-header">
             <div class="liga-name">{liga_display}</div>
@@ -202,7 +202,7 @@ def liga_status_card(liga_key: str, liga_display: str, tablas_cargadas: dict):
             <div class="table-progress-fill" style="width:{pct}%"></div>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """).strip(), unsafe_allow_html=True)
 
 
 # ─── Match card (Análisis) ──────────────────────────────────────
@@ -235,7 +235,7 @@ def market_chips(mercados: list[dict]):
         <span class="market-ev">{ev_str} · {prob_str}</span>
         """
     chips_html += '</div>'
-    st.markdown(chips_html, unsafe_allow_html=True)
+    st.markdown((chips_html).strip(), unsafe_allow_html=True)
 
 
 # ─── Fuzzy match confirmation ────────────────────────────────────
@@ -256,23 +256,23 @@ def fuzzy_confirm_block(pending_matches: list[dict]) -> dict:
     </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("""
+    st.markdown(("""
     <div class="inline-tip">
         El sistema encontró <strong>posibles coincidencias</strong> pero no está seguro.
         Confirma o corrige cada una antes de cargar los momios.
     </div>
-    """, unsafe_allow_html=True)
+    """).strip(), unsafe_allow_html=True)
 
     confirmed = {}
     for i, match in enumerate(pending_matches):
         col1, col2, col3 = st.columns([3, 3, 2])
         with col1:
-            st.markdown(f"""
+            st.markdown((f"""
             <div class="fuzzy-card">
                 <div class="fuzzy-title">📋 En el JSON</div>
                 <div class="fuzzy-match">{match['json_name']}</div>
             </div>
-            """, unsafe_allow_html=True)
+            """).strip(), unsafe_allow_html=True)
         with col2:
             st.markdown(f"""
             <div class="fuzzy-card" style="background:var(--s-green-bg);border-color:var(--s-green-border)">
@@ -305,13 +305,13 @@ def momios_inline_editor(partidos: list[dict]) -> dict:
         st.info("No hay partidos cargados. Ve a Datos primero.")
         return {}
 
-    st.markdown("""
+    st.markdown(("""
     <div class="inline-tip">
         <strong>Formato americano:</strong> -110, +150, +200 · 
         <strong>Decimal:</strong> 1.90, 2.50, 3.00 · 
         Deja en blanco si no quieres apostar ese partido.
     </div>
-    """, unsafe_allow_html=True)
+    """).strip(), unsafe_allow_html=True)
 
     momios_editados = {}
 
@@ -322,7 +322,7 @@ def momios_inline_editor(partidos: list[dict]) -> dict:
     hdr_cols[2].markdown("**Empate**")
     hdr_cols[3].markdown("**Visitante**")
 
-    st.markdown("<hr style='margin:6px 0'>", unsafe_allow_html=True)
+    st.markdown(("<hr style='margin:6px 0'>").strip(), unsafe_allow_html=True)
 
     for i, p in enumerate(partidos):
         key_prefix = safe_key("momio_inline", i, p.get("home", ""), p.get("away", ""))
@@ -373,25 +373,25 @@ def momios_inline_editor(partidos: list[dict]) -> dict:
 
 def section_header(title: str, count: Optional[int] = None):
     count_html = f'<div class="section-count">{count}</div>' if count is not None else ""
-    st.markdown(f"""
+    st.markdown((f"""
     <div class="section-header">
         <div class="section-title">{title}</div>
         {count_html}
     </div>
-    """, unsafe_allow_html=True)
+    """).strip(), unsafe_allow_html=True)
 
 
 # ─── Toast ────────────────────────────────────────────────────
 
 def toast(msg: str, tipo: str = "success"):
     """Tipo: success | error | info"""
-    st.markdown(f'<div class="ip-toast {tipo}">{msg}</div>', unsafe_allow_html=True)
+    st.markdown((f'<div class="ip-toast {tipo}">{msg}</div>').strip(), unsafe_allow_html=True)
 
 
 # ─── Inline tip ───────────────────────────────────────────────
 
 def inline_tip(html: str):
-    st.markdown(f'<div class="inline-tip">{html}</div>', unsafe_allow_html=True)
+    st.markdown((f'<div class="inline-tip">{html}</div>').strip(), unsafe_allow_html=True)
 
 
 # ─── Auto-save indicator ───────────────────────────────────────
