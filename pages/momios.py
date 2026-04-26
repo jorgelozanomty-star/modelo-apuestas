@@ -95,11 +95,17 @@ def _all_partidos():
             if "Score" in df.columns:
                 df = df[df["Score"].isna() | (df["Score"].astype(str).str.strip() == "")]
             for _, row in df.iterrows():
+                def _rget(row, *keys, default=""):
+                    for k in keys:
+                        v = row.get(k, None)
+                        if v is not None and str(v).strip() not in ("", "nan", "NaT"):
+                            return v
+                    return default
                 partidos.append({
-                    "home":  row.get("Home", row.get("home", "")),
-                    "away":  row.get("Away", row.get("away", "")),
-                    "fecha": row.get("Date", row.get("fecha", "")),
-                    "hora":  row.get("Time", row.get("hora", "")),
+                    "home":  _rget(row, "Home", "home"),
+                    "away":  _rget(row, "Away", "away"),
+                    "fecha": _rget(row, "Date", "date", "fecha", "Fecha"),
+                    "hora":  _rget(row, "Time", "time", "hora"),
                     "liga":  liga_key,
                     "liga_key": liga_key,
                 })
@@ -194,8 +200,10 @@ def _inline(todos, momios_data):
     for p in todos:
         if liga_f != "Todas" and p["liga"] != liga_f:
             continue
-        fecha_raw = p.get("fecha") or p.get("Date") or ""
+        fecha_raw = (p.get("fecha") or p.get("Date") or
+                     p.get("date") or p.get("Fecha") or "")
         fecha_p = _parse_fecha_safe(fecha_raw)
+        # Solo excluir si la fecha es válida Y está fuera del rango
         if fecha_p is None or (hoy <= fecha_p <= limite):
             filtrados.append(p)
     filtrados = filtrados[:40]
@@ -206,6 +214,11 @@ def _inline(todos, momios_data):
 
     section_header("Partidos", len(filtrados))
     st.info("**Formato:** Americano `-110`/`+200` o Decimal `1.90` · Deja en blanco lo que no quieras apostar")
+    with st.expander("🔍 Debug fechas (primeros 5 partidos)"):
+        for dbp in filtrados[:5]:
+            fr = dbp.get("fecha") or dbp.get("Date") or dbp.get("date") or "SIN FECHA"
+            fp = _parse_fecha_safe(fr)
+            st.text(f"{dbp.get('home','?')} vs {dbp.get('away','?')} | fecha_raw={repr(fr)} | fecha_p={fp}")
 
     # Headers
     hc = st.columns([3, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1])
@@ -223,7 +236,7 @@ def _inline(todos, momios_data):
 
         row = st.columns([3, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1])
         with row[0]:
-            st.markdown(f"**{home} vs {away}** · {p['liga']} · {fecha}", unsafe_allow_html=True)
+            st.markdown(f"**{home} vs {away}** · {fecha}", unsafe_allow_html=True)
         fields = [("home","-130"),("draw","+280"),("away","+350"),
                   ("over25","-115"),("under25","-105"),("btts_yes","-120")]
         row_inputs = {}
