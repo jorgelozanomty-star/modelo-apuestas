@@ -13,17 +13,34 @@ from ui.components import (
 from data.leagues import LEAGUES, LEAGUE_NAMES
 from data import parser, fixtures as fixtures_mod
 
+# Keys = nombres exactos que usa profile.py en get_team_row(data_master, KEY, squad)
 TABLE_SIGNATURES = {
-    "standard":    {"xG", "npxG", "xAG"},
-    "shooting":    {"SoT%", "G/Sh", "Dist"},
-    "passing":     {"TotDist", "PrgDist", "KP"},
-    "passtypes":   {"Live", "Dead", "TB", "Sw"},
-    "gca":         {"SCA", "GCA", "SCA90"},
-    "defense":     {"TklW", "Blocks", "Int"},
-    "possession":  {"Touches", "Mid 3rd"},
-    "playingtime": {"Mn/MP", "PPM"},
-    "misc":        {"CrdY", "CrdR", "Fls", "Fld"},
-    "ha":          {"Home", "Away"},
+    "Tabla General":    {"Pts", "GF", "GA", "GD", "Pts/MP"},
+    "Standard Squad":   {"xG", "npxG", "xAG"},
+    "Shooting Squad":   {"SoT%", "G/Sh", "Dist"},
+    "Passing Squad":    {"TotDist", "PrgDist", "KP"},
+    "Pass Types Squad": {"Live", "Dead", "TB", "Sw"},
+    "GCA Squad":        {"SCA", "GCA", "SCA90"},
+    "Defense Squad":    {"TklW", "Blocks", "Int"},
+    "Possession Squad": {"Touches", "Mid 3rd"},
+    "PlayingTime Squad":{"Mn/MP", "PPM"},
+    "Misc Squad":       {"CrdY", "CrdR", "Fls"},
+    "ha":               {"Home", "Away"},
+}
+
+# Nombres para mostrar en la UI
+TABLA_NOMBRES_LOCAL = {
+    "Tabla General":     "Tabla General",
+    "Standard Squad":    "Estándar",
+    "Shooting Squad":    "Disparos",
+    "Passing Squad":     "Pases",
+    "Pass Types Squad":  "Tipo Pase",
+    "GCA Squad":         "GCA/SCA",
+    "Defense Squad":     "Defensa",
+    "Possession Squad":  "Posesión",
+    "PlayingTime Squad": "Minutos",
+    "Misc Squad":        "Misc",
+    "ha":                "Casa/Vis",
 }
 
 
@@ -130,9 +147,9 @@ def _tab(liga_key: str):
             with st.spinner("Detectando tablas..."):
                 cargadas, errores = _parse_all(liga_key, raw)
             if cargadas:
-                nombres = [TABLA_NOMBRES.get(t, t) for t in cargadas]
+                nombres = [TABLA_NOMBRES_LOCAL.get(t, t) for t in cargadas]
                 toast(f"✅ {len(cargadas)} tablas: {', '.join(nombres)}", "success")
-                faltantes = [TABLA_NOMBRES[t] for t in TABLE_SIGNATURES if t not in cargadas]
+                faltantes = [TABLA_NOMBRES_LOCAL.get(t, t) for t in TABLE_SIGNATURES if t not in cargadas]
                 if faltantes:
                     toast(f"ℹ️ No detectadas: {', '.join(faltantes)}", "info")
             else:
@@ -154,7 +171,7 @@ def _tab(liga_key: str):
     if faltantes and tablas:
         with st.expander(f"📌 Cargar tablas faltantes ({len(faltantes)})"):
             sel = st.selectbox("Tabla", faltantes,
-                               format_func=lambda t: TABLA_NOMBRES.get(t, t),
+                               format_func=lambda t: TABLA_NOMBRES_LOCAL.get(t, t),
                                key=safe_key("sel_ind", liga_key))
             raw_ind = st.text_area("Pegar tabla", height=140,
                                    key=safe_key("ta_ind", liga_key, sel))
