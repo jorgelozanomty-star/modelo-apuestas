@@ -67,66 +67,52 @@ def bankroll_sidebar():
 # ─── Pipeline stepper ────────────────────────────────────────
 
 def pipeline_steps():
-    """
-    Muestra los 4 pasos del flujo semanal con estado visual.
-    done / active / pending basado en session_state.
-    """
+    """Pipeline semanal con widgets nativos de Streamlit (sin HTML custom)."""
     ss = st.session_state
-    fbref_data = ss.get("fbref_data", {})
-    fixtures_data = ss.get("fixtures_data", {})
-    momios_data = ss.get("momios_data", {})
-    jornada = ss.get("jornada_activa", [])
-    historial = ss.get("historial", [])
+    fbref_data     = ss.get("fbref_data", {})
+    fixtures_data  = ss.get("fixtures_data", {})
+    momios_data    = ss.get("momios_data", {})
+    jornada        = ss.get("jornada_activa", [])
+    historial      = ss.get("historial", [])
 
-    ligas_con_datos = sum(1 for v in fbref_data.values() if v)
+    ligas_con_datos    = sum(1 for v in fbref_data.values() if v)
     ligas_con_fixtures = sum(1 for v in fixtures_data.values() if v)
     partidos_con_momios = sum(
-        1 for partidos in momios_data.values()
-        for p in partidos.values() if p
-    ) if isinstance(momios_data, dict) else 0
+        1 for v in momios_data.values()
+        if isinstance(v, dict) and any(
+            v.get(k) for k in ("home", "draw", "away")
+        )
+    )
 
     step1_done = ligas_con_datos >= 1 and ligas_con_fixtures >= 1
     step2_done = partidos_con_momios >= 1
     step3_done = len(jornada) >= 1
     step4_done = any(b.get("resultado") is not None for b in historial)
 
-    def step_html(num, label, sub, status):
-        cls = {"done": "done", "active": "active", "pending": "pending"}.get(status, "pending")
-        icon = "✓" if status == "done" else str(num)
-        return f"""
-        <div class="ip-step {cls}">
-            <div class="ip-step-num">{icon}</div>
-            <div class="ip-step-info">
-                <div class="ip-step-label">{label}</div>
-                <div class="ip-step-sub">{sub}</div>
-            </div>
-        </div>"""
-
-    def status(done, prev_done):
-        if done:
-            return "done"
-        if prev_done:
-            return "active"
-        return "pending"
-
-    s1 = "done" if step1_done else "active"
-    s2 = status(step2_done, step1_done)
-    s3 = status(step3_done, step2_done)
-    s4 = status(step4_done, step3_done)
-
-    sub1 = f"{ligas_con_datos} liga{'s' if ligas_con_datos != 1 else ''}" if step1_done else "sin datos"
+    sub1 = f"{ligas_con_datos} liga(s)" if step1_done else "sin datos"
     sub2 = f"{partidos_con_momios} partidos" if step2_done else "pendiente"
     sub3 = f"{len(jornada)} picks" if step3_done else "pendiente"
     sub4 = "registrado" if step4_done else "pendiente"
 
-    html = f"""
-    <div class="ip-pipeline">
-        {step_html(1, 'Cargar Ligas', sub1, s1)}
-        {step_html(2, 'Momios', sub2, s2)}
-        {step_html(3, 'Picks', sub3, s3)}
-        {step_html(4, 'Resultados', sub4, s4)}
-    </div>"""
-    st.markdown((html).strip(), unsafe_allow_html=True)
+    ICONS = {True: "✅", False: "⬜"}
+    ACTIVE = "🔶"
+
+    steps = [
+        (ICONS[step1_done], "① Cargar Ligas", sub1, step1_done),
+        (ICONS[step2_done] if step1_done else ACTIVE if step1_done else "⬜", "② Momios", sub2, step2_done),
+        (ICONS[step3_done] if step2_done else "⬜", "③ Picks", sub3, step3_done),
+        (ICONS[step4_done] if step3_done else "⬜", "④ Resultados", sub4, step4_done),
+    ]
+
+    cols = st.columns(4)
+    for col, (icon, label, sub, done) in zip(cols, steps):
+        bg = "#F0FDF4" if done else "#FFFBEB" if not done else "#F5F5F5"
+        col.markdown(
+            f"**{icon} {label}**  \n"
+            f"<span style='font-size:0.75rem;color:#888'>{sub}</span>",
+            unsafe_allow_html=True,
+        )
+    st.markdown("---")
 
 
 # ─── Next action CTA ──────────────────────────────────────────
