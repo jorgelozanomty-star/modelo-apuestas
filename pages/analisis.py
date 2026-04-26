@@ -12,7 +12,7 @@ from ui.components import (
     auto_save_indicator, mark_modified, safe_key,
     fmt_momio_americano
 )
-from data.leagues import LIGAS
+from data.leagues import LEAGUES, LEAGUE_NAMES
 from core.poisson import calcular_probabilidades
 from core.kelly import kelly_bet
 from core.value import calcular_ev
