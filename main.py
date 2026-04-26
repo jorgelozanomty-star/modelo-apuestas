@@ -1,74 +1,80 @@
 """
-main.py - Intelligence Pro v3.0
-Navegacion de 3 paginas: Datos · Momios · Analisis
+Intelligence Pro — main.py v4.0
+Navegación con home dashboard como primera página.
+Auto-inicialización de session_state.
 """
 import streamlit as st
 
+# ── Configuración de la app ────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Intelligence Pro",
-    page_icon="◈",
+    page_icon="🎯",
     layout="wide",
     initial_sidebar_state="expanded",
+    menu_items={
+        "Get help": None,
+        "Report a bug": None,
+        "About": "Intelligence Pro — Modelo Poisson + Kelly + xG Blend"
+    }
 )
 
-from data.session import init
-init()
+# ── Inicializar session_state con valores por defecto ─────────────────────────
+_DEFAULTS = {
+    "fbref_data":       {},   # {liga_key: {tabla_key: DataFrame}}
+    "fixtures_data":    {},   # {liga_key: [partidos]}
+    "momios_data":      {},   # {partido_key: {home, draw, away, ...}}
+    "ha_store":         {},   # {liga_key: ha_splits}
+    "h2h_data":         {},   # {home_away: [encuentros]}
+    "bankroll":         1000.0,
+    "bankroll_inicial": 1000.0,
+    "kelly_fraccion":   0.15,
+    "jornada_activa":   [],   # [pick_dict]
+    "historial":        [],   # [pick_resuelto]
+    "parlay_activo":    [],
+    "_session_modified": False,
+    "_fuzzy_confirmaciones": {},  # cache de confirmaciones fuzzy
+}
 
-pg_datos    = st.Page("pages/datos.py",    title="① Datos",    icon="📂", default=True)
-pg_momios   = st.Page("pages/momios.py",   title="② Momios",   icon="💰")
-pg_analisis = st.Page("pages/analisis.py",    title="③ Análisis", icon="🔬")
-pg_backtest = st.Page("pages/backtest_page.py", title="④ Backtest",  icon="📊")
+for key, default in _DEFAULTS.items():
+    if key not in st.session_state:
+        st.session_state[key] = default
 
-nav = st.navigation([pg_datos, pg_momios, pg_analisis, pg_backtest])
+# ── Definición de páginas ──────────────────────────────────────────────────────
+home_page = st.Page(
+    "pages/home.py",
+    title="Inicio",
+    icon="🏠",
+    default=True,
+)
+datos_page = st.Page(
+    "pages/datos.py",
+    title="① Cargar Ligas",
+    icon="📋",
+)
+momios_page = st.Page(
+    "pages/momios.py",
+    title="② Momios",
+    icon="💰",
+)
+analisis_page = st.Page(
+    "pages/analisis.py",
+    title="③ Análisis",
+    icon="🎯",
+)
+backtest_page = st.Page(
+    "pages/backtest_page.py",
+    title="Backtest",
+    icon="📊",
+)
 
-with st.sidebar:
-    st.markdown("### ◈ Intelligence Pro")
-    st.markdown(
-        '<p style="font-size:0.68rem;color:#a8a29e;font-family:DM Mono,monospace;margin-top:-6px;">'
-        'v3.0 · Datos · Momios · Análisis</p>',
-        unsafe_allow_html=True,
-    )
-    from ui.styles import inject_css
-    inject_css()
-    from ui.components import fmt_money
-    from core.kelly import roi_pct
-    r = roi_pct(st.session_state.banca_actual, st.session_state.banca_inicial)
-    roi_cls = "roi-pos" if r > 0 else ("roi-neg" if r < 0 else "roi-neu")
-    st.markdown(
-        f'<div class="banca-box">'
-        f'<div class="banca-lbl">Banca Actual</div>'
-        f'<div class="banca-val">{fmt_money(st.session_state.banca_actual)}</div>'
-        f'<div class="banca-roi {roi_cls}">ROI: {r:+.2f}%</div>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-    st.markdown("---")
-    from datetime import date
-    from data.session import export_session, import_session
-    st.markdown(
-        '<p style="font-size:0.62rem;font-weight:600;color:#44403c;text-transform:uppercase;letter-spacing:0.10em;">Sesión</p>',
-        unsafe_allow_html=True,
-    )
-    st.download_button(
-        "⬇️ Exportar sesión",
-        data=export_session(),
-        file_name=f"intelligence_pro_{date.today()}.json",
-        mime="application/json",
-        use_container_width=True,
-    )
-    uploaded = st.file_uploader(
-        "⬆️ Cargar sesión", type="json",
-        label_visibility="collapsed", key="main_upload",
-    )
-    if uploaded:
-        fid = f"{uploaded.name}_{uploaded.size}"
-        if st.session_state.get("_main_import") != fid:
-            ok, msg = import_session(uploaded.read())
-            st.session_state["_main_import"] = fid
-            if ok:
-                st.success(msg)
-                st.rerun()
-            else:
-                st.error(msg)
+# ── Navegación ─────────────────────────────────────────────────────────────────
+nav = st.navigation(
+    {
+        "": [home_page],
+        "Flujo semanal": [datos_page, momios_page, analisis_page],
+        "Herramientas": [backtest_page],
+    },
+    position="sidebar",
+)
 
 nav.run()
