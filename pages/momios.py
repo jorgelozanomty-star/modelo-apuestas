@@ -66,9 +66,16 @@ def _momios():
 
 
 def _all_equipo_names():
+    import pandas as pd
     nombres = set()
     for lp in st.session_state.get("fixtures_data", {}).values():
-        if lp:
+        if lp is None or (hasattr(lp, "__len__") and len(lp) == 0):
+            continue
+        if isinstance(lp, pd.DataFrame):
+            for col in ["Home", "home", "Away", "away"]:
+                if col in lp.columns:
+                    nombres.update(lp[col].dropna().tolist())
+        else:
             for p in lp:
                 nombres.add(p.get("home", ""))
                 nombres.add(p.get("away", ""))
@@ -76,13 +83,30 @@ def _all_equipo_names():
 
 
 def _all_partidos():
+    import pandas as pd
     partidos = []
     for liga_key, lp in st.session_state.get("fixtures_data", {}).items():
-        if not lp:
+        if lp is None or (hasattr(lp, "__len__") and len(lp) == 0):
             continue
-        for p in lp:
-            if not p.get("jugado", False):
-                partidos.append({**p, "liga": liga_key, "liga_key": liga_key})
+        # lp puede ser DataFrame o lista de dicts
+        if isinstance(lp, pd.DataFrame):
+            df = lp.copy()
+            # Partidos sin score = futuros
+            if "Score" in df.columns:
+                df = df[df["Score"].isna() | (df["Score"].astype(str).str.strip() == "")]
+            for _, row in df.iterrows():
+                partidos.append({
+                    "home":  row.get("Home", row.get("home", "")),
+                    "away":  row.get("Away", row.get("away", "")),
+                    "fecha": row.get("Date", row.get("fecha", "")),
+                    "hora":  row.get("Time", row.get("hora", "")),
+                    "liga":  liga_key,
+                    "liga_key": liga_key,
+                })
+        else:
+            for p in lp:
+                if not p.get("jugado", False):
+                    partidos.append({**p, "liga": liga_key, "liga_key": liga_key})
     return partidos
 
 
