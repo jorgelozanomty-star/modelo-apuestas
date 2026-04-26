@@ -149,9 +149,26 @@ def render():
 
 
 def _parse_fecha_safe(f):
-    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y"):
+    import pandas as pd
+    if f is None:
+        return None
+    # Pandas Timestamp
+    if hasattr(f, "date"):
         try:
-            return datetime.datetime.strptime(str(f).strip(), fmt).date()
+            return f.date()
+        except Exception:
+            pass
+    # pandas NaT
+    try:
+        if pd.isna(f):
+            return None
+    except Exception:
+        pass
+    # String formats - también maneja "2026-05-02 00:00:00"
+    s = str(f).strip().split(" ")[0].split("T")[0]
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y"):
+        try:
+            return datetime.datetime.strptime(s, fmt).date()
         except Exception:
             pass
     return None
