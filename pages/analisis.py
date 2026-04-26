@@ -376,13 +376,21 @@ def _add_pick(r: dict, mercado: dict, ss: dict):
 
 
 def _find_liga_key(home: str, away: str, fixtures_data: dict) -> str:
+    import pandas as pd
     for liga_key, partidos in fixtures_data.items():
-        if not partidos:
+        if partidos is None or (hasattr(partidos, "__len__") and len(partidos) == 0):
             continue
-        for p in partidos:
-            if (p.get("home", "").lower() == home.lower()
-                    or p.get("away", "").lower() == away.lower()):
-                return liga_key
+        if isinstance(partidos, pd.DataFrame):
+            for col_h, col_a in [("Home","Away"), ("home","away")]:
+                if col_h in partidos.columns:
+                    mask = (partidos[col_h].str.lower() == home.lower()) |                            (partidos[col_a].str.lower() == away.lower())
+                    if mask.any():
+                        return liga_key
+        else:
+            for p in partidos:
+                if (p.get("home","").lower() == home.lower()
+                        or p.get("away","").lower() == away.lower()):
+                    return liga_key
     return ""
 
 render()
